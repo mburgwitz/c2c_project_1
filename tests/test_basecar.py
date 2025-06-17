@@ -28,13 +28,13 @@ def test_speed(car):
 
 def test_steering_angle(car):
 
-    assert -45 == car.MIN_STEERING_ANGLE
+    assert 45 == car.MIN_STEERING_ANGLE
     assert 135 == car.MAX_STEERING_ANGLE
 
-    car.steering_angle = -50
+    car.steering_angle = 50
     assert car.steering_angle == car.MIN_STEERING_ANGLE
 
-    car.steering_angle = -45
+    car.steering_angle = 45
     assert car.steering_angle == car.MIN_STEERING_ANGLE
 
     car.steering_angle = 50

@@ -1,16 +1,14 @@
 from basisklassen import FrontWheels, BackWheels
-from typing import Optional
-
 
 class BaseCar:
 
     MAX_STEERING_ANGLE = 135
-    MIN_STEERING_ANGLE = -45
+    MIN_STEERING_ANGLE = 45
 
     MAX_SPEED = 100
     MIN_SPEED = -100
 
-    def __init__(self, steering_angle: float = 0.0, speed: float = 0.0, direction: int = 0):
+    def __init__(self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0):
     
         self.__steering_angle = steering_angle
         self.__speed = speed
@@ -52,14 +50,11 @@ class BaseCar:
             return self.MAX_SPEED
         return speed
     
-    def drive(self, speed: Optional[int], angle: Optional[float]):
+    def drive(self, speed: int = None, angle: float = None):
         if angle is not None:
             self.steering_angle = angle
         if speed is not None:
             self.speed = speed
-
-        self.__fw.turn(self.steering_angle)
-        self.__bw.speed(self.speed)
 
         if self.speed > 0:
             self.__bw.forward()
@@ -69,6 +64,9 @@ class BaseCar:
             self.__direction = -1
         else:
             self.stop()
+
+        self.__fw.turn(self.steering_angle)
+        self.__bw.speed = abs(self.speed)        
 
     def stop(self):
         self.__bw.stop()
