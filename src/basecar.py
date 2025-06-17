@@ -1,5 +1,6 @@
 from basisklassen import FrontWheels, BackWheels
 
+
 class BaseCar:
 
     MAX_STEERING_ANGLE = 135
@@ -71,7 +72,6 @@ class BaseCar:
     def stop(self):
         self.__bw.stop()
         self.__direction = 0
-
 
 
 if __name__ == '__main__':
