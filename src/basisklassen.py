@@ -909,11 +909,11 @@ def main(modus):
     if modus == 0:
         print('Der Servomotor wird nach rechts und links bewegt und dann auf geradeus ausgerichtet.')
         fw = FrontWheels()
-        fw.turn(45)
+        fw.turn(45)         # die -10 Grad richten meine Räder gerade aus
         time.sleep(.5)
         fw.turn(135)
         time.sleep(.5)
-        fw.turn(90)
+        fw.turn(90)         # 80 Grad war bei mir geradeaus - Offset hat nicht funktioniert
         x=input('Servo der Lenkung auf 90 Grad/geradeaus ausgerichtet! (ENTER zum beenden)')
 
     if modus == 1:
