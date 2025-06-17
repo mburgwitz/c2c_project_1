@@ -8,7 +8,7 @@ class BaseCar:
     MAX_SPEED = 100
     MIN_SPEED = -100
 
-    def __init__(self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0):
+    def __init__(self, steering_angle: float = 0.0, speed: float = 0.0, direction: int = 0):
     
         self.__steering_angle = steering_angle
         self.__speed = speed
