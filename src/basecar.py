@@ -74,14 +74,5 @@ class BaseCar:
         self.__bw.stop()
         self.__direction = 0
 
-            
-if __name__ == '__main__' :
 
-    
-    car = BaseCar()
-
-    #**********************
-
-    
-    
 
