@@ -1,7 +1,10 @@
 from basisklassen import FrontWheels, BackWheels
+<<<<<<< HEAD
 from typing import Optional
 import math
 import time
+=======
+>>>>>>> micha_dev
 
 class BaseCar:
 
@@ -59,9 +62,12 @@ class BaseCar:
         if speed is not None:
             self.speed = abs(speed)
 
+<<<<<<< HEAD
         self.__fw.turn(self.steering_angle)
         self.__bw.speed = abs(self.speed)
 
+=======
+>>>>>>> micha_dev
         if self.speed > 0:
             self.__bw.forward()
             self.__direction = 1
@@ -70,6 +76,9 @@ class BaseCar:
             self.__direction = -1
         else:
             self.stop()
+
+        self.__fw.turn(self.steering_angle)
+        self.__bw.speed = abs(self.speed)        
 
     def stop(self):
         self.__bw.stop()
