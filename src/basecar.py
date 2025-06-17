@@ -1,11 +1,5 @@
 from basisklassen import FrontWheels, BackWheels
-<<<<<<< HEAD
-from typing import Optional
-import math
 import time
-=======
->>>>>>> micha_dev
-
 class BaseCar:
 
     MAX_STEERING_ANGLE = 135
@@ -60,14 +54,8 @@ class BaseCar:
         if angle is not None:
             self.steering_angle = angle
         if speed is not None:
-            self.speed = abs(speed)
+            self.speed = speed
 
-<<<<<<< HEAD
-        self.__fw.turn(self.steering_angle)
-        self.__bw.speed = abs(self.speed)
-
-=======
->>>>>>> micha_dev
         if self.speed > 0:
             self.__bw.forward()
             self.__direction = 1
@@ -90,6 +78,7 @@ if __name__ == '__main__':
     car = BaseCar()
     car.drive(30, 90)
     time.sleep(2)
+    car.stop()
     car.drive(-30, 45)
     time.sleep(2)
     car.drive(0, 90)
