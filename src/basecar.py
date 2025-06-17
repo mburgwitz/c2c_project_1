@@ -4,7 +4,14 @@ from typing import Optional
 
 class BaseCar:
 
-    def __init__(self, steering_angle: float, speed: float, direction: int):
+    MAX_STEERING_ANGLE = 135
+    MIN_STEERING_ANGLE = -45
+
+    MAX_SPEED = 100
+    MIN_SPEED = -100
+
+    def __init__(self, steering_angle: float = 0.0, speed: float = 0.0, direction: int = 0):
+    
         self.__steering_angle = steering_angle
         self.__speed = speed
         self.__direction = direction  
@@ -32,17 +39,17 @@ class BaseCar:
         return self.__direction
     
     def __checkSteeringAngle(self, angle: float) -> float:
-        if angle < 45.0: 
-            return 45.0 
-        elif angle > 135.0:
-            return 135.0
+        if angle < self.MIN_STEERING_ANGLE: 
+            return self.MIN_STEERING_ANGLE 
+        elif angle > self.MAX_STEERING_ANGLE:
+            return self.MAX_STEERING_ANGLE
         return angle
     
     def __checkSpeed(self, speed: int) -> int:
-        if speed < -100:
-            return -100
-        elif speed > 100:
-            return 100
+        if speed < self.MIN_SPEED:
+            return self.MIN_SPEED
+        elif speed > self.MAX_SPEED:
+            return self.MAX_SPEED
         return speed
     
     def drive(self, speed: Optional[int], angle: Optional[float]):
@@ -75,20 +82,6 @@ if __name__ == '__main__' :
 
     #**********************
 
-    car.steering_angle = -50
-    print(f"steering_angle: {car.steering_angle}")
-
-    car.steering_angle = -45
-    print(f"steering_angle: {car.steering_angle}")
-
-    car.steering_angle = 50
-    print(f"steering_angle: {car.steering_angle}")
-
-    car.steering_angle = 135
-    print(f"steering_angle: {car.steering_angle}")
-
-    car.steering_angle = 150
-    print(f"steering_angle: {car.steering_angle}")
-        
+    
     
 
