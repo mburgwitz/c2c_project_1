@@ -1,4 +1,4 @@
-from Basisklassen import FrontWheels, BackWheels
+from basisklassen import FrontWheels, BackWheels
 
 class BaseCar:
 
@@ -8,7 +8,7 @@ class BaseCar:
     MAX_STEERING_ANGLE = 145
     MIN_STEERING_ANGLE = 35
 
-    def __init__ (self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0) # warum ist hier Float/init etc erforderlich?
+    def __init__(self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0): # warum ist hier Float/init etc erforderlich?
         self.__steering_angle = steering_angle #warum zwei unterstriche
         self.__speed = speed
         self.__direction = direction 
@@ -20,7 +20,7 @@ class BaseCar:
         return self.__steering_angle
 
     @steering_angle.setter
-    def steering_angle(self, new_angle: float)
+    def steering_angle(self, new_angle: float):
         self.__steering_angle = self.__CheckSteeringAngle(new_angle)
 
     @property
@@ -35,22 +35,22 @@ class BaseCar:
     def direction(self):
         return self.__direction
 
-    def __CheckSteeringAngle(self, angle = float) --> float:
+    def __CheckSteeringAngle(self, angle = float):
         if angle > self.MAX_STEERING_ANGLE:
             return self.MAX_STEERING_ANGLE
         elif angle < self.MIN_STEERING_ANGLE:
             return self.MIN_STEERING_ANGLE
         return angle
 
-    def __CheckSpeed(self, speed = int) --> int:
+    def __CheckSpeed(self, speed = int):
         if speed > self.MAX_SPEED:
             return self.MAX_SPEED
         elif speed < self.MIN_SPEED:
             return self.MIN_SPEED
-        return angle
+        return speed
 
     
-    def drive(self, speed: int = None; angle: float = None):
+    def drive(self, speed: int = None, angle: float = None):
         if angle is not None:
             self.steering_angle = angle
         if speed is not None:
@@ -70,6 +70,42 @@ class BaseCar:
         self.__direction = 0
 
         
+if __name__ == '__main__':
+    car = BaseCar()
+
+    import time
+
+    # Fahrmodus 1
+    car.drive(speed = 30)
+    time.sleep(3)
+    
+    
+    car.stop()
+    time.sleep(1)
+
+    car.drive(speed = -30)
+    time.sleep(3)
+
+    car.stop()
+
+
+    time.sleep(3)
+
+    # Fahrmodus 2
+    car.drive(speed = 30, angle= 90)
+    time.sleep(1)
+    
+    car.drive(speed = 30, angle = 135)
+    time.sleep(8)
+
+    car.drive(speed= -30, angle = 135)
+    time.sleep(8)
+
+    car.drive(speed = -30, angle= 90)
+    time.sleep(1)
+
+    car.stop()
+    
 
 
 
