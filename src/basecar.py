@@ -1,6 +1,5 @@
 from basisklassen import FrontWheels, BackWheels
 
-
 class BaseCar:
 
     MAX_STEERING_ANGLE = 135
@@ -9,7 +8,7 @@ class BaseCar:
     MAX_SPEED = 100
     MIN_SPEED = -100
 
-    def __init__(self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0):
+    def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
     
         self.__steering_angle = steering_angle
         self.__speed = speed
@@ -22,7 +21,7 @@ class BaseCar:
         return self.__steering_angle
     
     @steering_angle.setter
-    def steering_angle(self, new_angle: float):
+    def steering_angle(self, new_angle: int):
         self.__steering_angle = self.__checkSteeringAngle(new_angle)
     
     @property
@@ -37,7 +36,7 @@ class BaseCar:
     def direction(self):
         return self.__direction
     
-    def __checkSteeringAngle(self, angle: float) -> float:
+    def __checkSteeringAngle(self, angle: int) -> int:
         if angle < self.MIN_STEERING_ANGLE: 
             return self.MIN_STEERING_ANGLE 
         elif angle > self.MAX_STEERING_ANGLE:
@@ -51,7 +50,7 @@ class BaseCar:
             return self.MAX_SPEED
         return speed
     
-    def drive(self, speed: int = None, angle: float = None):
+    def drive(self, speed: int = None, angle: int = None):
         if angle is not None:
             self.steering_angle = angle
         if speed is not None:
