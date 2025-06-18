@@ -1,1 +1,1 @@
-PYTHONPATH=src pytest tests
+PYTHONPATH="$(pwd)/src:$(pwd):$PYTHONPATH" pytest tests

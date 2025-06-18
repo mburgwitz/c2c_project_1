@@ -1,4 +1,5 @@
 from basisklassen import FrontWheels, BackWheels
+from util.logger import Logger
 
 class BaseCar:
     """ Provides basic driving functionality.
@@ -28,7 +29,11 @@ class BaseCar:
         self.__speed = speed
         self.__direction = direction  
         self.__fw = FrontWheels()
-        self.__bw = BackWheels()      
+        self.__bw = BackWheels()     
+
+        self.__logger = Logger.get_logger(BaseCar) 
+
+        self.__logger.info("init finished")
 
     #------------------------------------
     # properties
@@ -185,10 +190,10 @@ class BaseCar:
         # Fahrtrichtung durch das Vorzeichen von speed bestimmen
         if self.speed > 0:
             self.__bw.forward()
-            self.direction = 1
+            self.__direction = 1
         elif self.speed < 0:
             self.__bw.backward()
-            self.direction = -1
+            self.__direction = -1
         else:
             self.stop()
 
