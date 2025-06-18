@@ -1,4 +1,4 @@
-from basisklassen import FrontWheels, BackWheels
+from basisklassen import FrontWheels, BackWheels # Man könnte auch alles importieren, aber in diesem Fall sind nur Front/BackWheels erforderlich, dann wird der gesamte Code ausgeführt
 
 class BaseCar:
 
@@ -9,7 +9,7 @@ class BaseCar:
     MIN_SPEED = -100
 
     def __init__(self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0):
-    
+    # Self als eigene Instanz innerhalb der Klasse BaseCar (Privat)
         self.__steering_angle = steering_angle
         self.__speed = speed
         self.__direction = direction  
