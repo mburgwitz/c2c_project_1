@@ -28,23 +28,23 @@ class BaseCar:
         self.__bw = BackWheels()      
 
     @property
-    def __steering_angle(self):
+    def steering_angle(self):
         return self.__steering_angle
     
-    @__steering_angle.setter
-    def __steering_angle(self, new_angle: int):
+    @steering_angle.setter
+    def steering_angle(self, new_angle: int):
         self.__steering_angle = self.__checkSteeringAngle(new_angle)
     
     @property
-    def __speed(self):
+    def speed(self):
         return self.__speed
     
-    @__speed.setter
-    def __speed(self, speed: int):
+    @speed.setter
+    def speed(self, speed: int):
         self.__speed = self.__checkSpeed(speed)
     
     @property
-    def __direction(self):
+    def direction(self):
         return self.__direction
     
     def __checkSteeringAngle(self, angle: int) -> int:
@@ -75,21 +75,21 @@ class BaseCar:
 
         '''
         if angle is not None:
-            self.steering_angle = angle
+            self.__steering_angle = angle
         if speed is not None:
-            self.speed = speed
+            self.__speed = speed
 
-        if self.speed > 0:
+        if self.__speed > 0:
             self.__bw.forward()
             self.__direction = 1
-        elif self.speed < 0:
+        elif self.__speed < 0:
             self.__bw.backward()
             self.__direction = -1
         else:
             self.stop()
 
-        self.__fw.turn(self.steering_angle)
-        self.__bw.speed = abs(self.speed)        
+        self.__fw.turn(self.__steering_angle)
+        self.__bw.speed = abs(self.__speed)        
 
     def stop(self):
         '''
