@@ -2,6 +2,7 @@ import logging, logging.config
 from typing import Any
 from pathlib import Path
 import threading
+from contextlib import contextmanager
 
 # Default local config path and config name
 DEFAULT_CONFIG_NAME = "logging.json"
@@ -34,7 +35,7 @@ class Logger:
     _instance = None
     _config_name = DEFAULT_CONFIG_NAME
     _config_path = DEFAULT_CONFIG_PATH
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls, *args, **kwargs):
         with cls._lock:
@@ -43,17 +44,24 @@ class Logger:
         return cls._instance
 
     def __init__(self,
-                 config_name: str = DEFAULT_CONFIG_NAME,
-                 config_path: Path = DEFAULT_CONFIG_PATH) -> None:
+                 config_name: str = None,
+                 config_path: Path = None) -> None:
         
         # Prevent reinitialization of the singleton
         if getattr(self, '_initialized', False):
             return
         
+        if config_name is None:
+            config_name = self.__class__._config_name
+        if config_path is None:
+            config_path = self.__class__._config_path
+
         self._config_name = config_name
         self._config_path = config_path
         self._is_configured = False
         self._initialized = True  # mark init done
+        self._last_error = None
+        self._failed_attempts = 0
 
     @classmethod
     def set_config_file(cls, config_name: str, config_path: Path) -> None:
@@ -66,15 +74,29 @@ class Logger:
         config_file : str
             Pfad zur JSON-Config-Datei (vollständiger Pfad).
         """
-        cls._config_name = config_name
-        cls._config_path = config_path
+        with cls._lock:
+            cls._config_name = config_name
+            cls._config_path = config_path
 
-        # if a singleton instance already exists, reset its state
-        if cls._instance is not None:
-            inst = cls._instance
-            inst._config_name = config_name
-            inst._config_path = config_path
-            inst._is_configured = False
+            # if a singleton instance already exists, reset its state
+            if cls._instance is not None:
+                inst = cls._instance
+                inst._config_name = config_name
+                inst._config_path = config_path
+                inst._is_configured = False
+                inst._failed_attempts = 0
+
+    @classmethod
+    @contextmanager
+    def use_config(cls, config_name: str, config_path: Path):
+        """Temporarily use another config file within a context."""
+        old_name = cls._config_name
+        old_path = cls._config_path
+        cls.set_config_file(config_name, config_path)
+        try:
+            yield
+        finally:
+            cls.set_config_file(old_name, old_path)
 
     def _configure(self) -> None:
         """
@@ -119,14 +141,34 @@ class Logger:
                 logging.config.dictConfig(config)
 
                 self._is_configured = True
+                self._last_error = None
 
             except Exception as e:
                 # Bootstrap handlers stays active
                 failed_path = self._config_path / self._config_name
                 logging.error(
                     f"Failed to load logging configuration '{failed_path}': {e}"
+                    "Using bootstrap logging."
                 )
-            
+                self._failed_attempts += 1
+                if self._failed_attempts >= 3:
+                    self._apply_default_config()
+
+                self._last_error = e
+
+                
+    def _apply_default_config(self) -> None:
+        """Apply a very small default logging configuration."""
+        root = logging.getLogger()
+        for h in root.handlers:
+            if isinstance(h, logging.StreamHandler):
+                h.setFormatter(logging.Formatter(
+                    "%(asctime)s %(levelname)s %(name)s: %(message)s"
+                ))
+        root.setLevel(logging.INFO)
+        logging.info("Applied fallback logging configuration")
+        self._is_configured = True
+
 
     @classmethod
     def get_logger(cls, target: Any) -> logging.Logger:

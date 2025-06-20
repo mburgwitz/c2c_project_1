@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -40,6 +41,14 @@ class ConfigManager:
     """
     _instance: Optional['ConfigManager'] = None
     _lock = threading.Lock()
+
+    @classmethod
+    def reset_instance(cls) -> None:
+        """Reset the singleton instance and stop any running watcher."""
+        with cls._lock:
+            if cls._instance is not None and cls._instance.is_watching():
+                cls._instance.stop_watch()
+            cls._instance = None
 
     def __new__(cls,
                 base_path: Union[str, Path],
@@ -91,7 +100,7 @@ class ConfigManager:
         # For watch mode, load immediately then start watcher
         if self.watch:
             self.load()
-            self._start_watch()
+            self.start_watch()
 
     def load(self) -> Dict[str, Any]:
         """
@@ -121,8 +130,14 @@ class ConfigManager:
                 logger.error("Loading configuration files failed: %s", e)
                 raise
 
+            # Normalize filenames to list of strings
+            if isinstance(self.filenames, (str, Path)):
+                filenames = [str(self.filenames)]
+            else:
+                filenames = [str(n) for n in self.filenames]
+
             # Merge multiple files into one dict
-            files = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
+            files = [filenames] if isinstance(filenames, (str, Path)) else filenames
             if isinstance(raw, dict) and set(raw.keys()) == set(files):
                 merged: Dict[str, Any] = {}
                 for section in raw.values():
@@ -136,6 +151,10 @@ class ConfigManager:
                     import jsonschema
                     jsonschema.validate(instance=merged, schema=self.schema)
                     logger.debug("Configuration passed JSON Schema validation")
+                except ImportError:
+                    msg = "jsonschema library required for type validation"
+                    logger.error("Schema validation failed: %s", msg)
+                    raise RuntimeError(msg)
                 except Exception as e:
                     logger.error("Schema validation failed: %s", e)
                     raise
@@ -158,6 +177,7 @@ class ConfigManager:
             logger.info("Configuration loaded successfully")
             return self._config
 
+
     def _apply_env_overrides(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
         """
         Override config with environment variables using CONFIG__SECTION__KEY style.
@@ -168,9 +188,32 @@ class ConfigManager:
                 continue
             keys = var[len(prefix):].split("__")
             keys = [k.lower() for k in keys]
-            logger.debug("Applying env override %s = %s", keys, val)
-            self._set_deep(cfg, keys, val)
+            try:
+                parsed = json.loads(val)
+            except Exception:
+                parsed = val
+            logger.debug("Applying env override %s = %s", keys, parsed)
+            typed_val = self._convert_env_value(val)
+            self._set_deep(cfg, keys, typed_val)
         return cfg
+    
+    
+    def _convert_env_value(self, value: str) -> Any:
+        """
+        Convert environment variable strings to int, float or bool when possible.
+        """
+        lower = value.lower()
+        if lower in {"true", "false"}:
+            return lower == "true"
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        try:
+            return float(value)
+        except ValueError:
+            return value
+        
 
     def _set_deep(self, d: Dict[str, Any], keys: List[str], val: Any) -> None:
         """
@@ -195,6 +238,10 @@ class ConfigManager:
             v = v[k]
         return v
 
+    def reload(self) -> Dict[str, Any]:
+        """Explicitly reload the configuration from disk."""
+        return self.load()
+    
     def as_attr(self) -> Any:
         """
         Return the configuration as an object with attribute-style access.
@@ -203,6 +250,18 @@ class ConfigManager:
         if not self._config_loaded:
             self.load()
         return _AttrWrapper(self._config)
+    
+    # ------------------------------------------------------------------
+    # Watcher management
+    # ------------------------------------------------------------------
+
+    def is_watching(self) -> bool:
+        """Return True if the background watch thread is running."""
+        return self._watch_thread is not None and self._watch_thread.is_alive()
+
+    def start_watch(self) -> None:
+        """Public method to start the background watch thread."""
+        self._start_watch()
 
     def _start_watch(self) -> None:
         """
@@ -246,6 +305,18 @@ class ConfigManager:
         self._watch_thread.join()
         logger.info("Stopped config watch thread")
 
+    # ------------------------------------------------------------------
+    # Context manager interface
+    # ------------------------------------------------------------------
+
+    def __enter__(self) -> 'ConfigManager':
+        if self.watch and not self.is_watching():
+            self.start_watch()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self.is_watching():
+            self.stop_watch()
 
 class _AttrWrapper:
     """

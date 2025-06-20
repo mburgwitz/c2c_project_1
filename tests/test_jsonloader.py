@@ -198,6 +198,12 @@ def test_load_directory_raises_file_not_found(tmp_path, loader):
         assert ei.value.path == dir_path
 
 @pytest.mark.jsonloader
+def test_invalid_base_path(tmp_path):
+    loader = JSONLoader(base_path=tmp_path / "missing")
+    with pytest.raises(FileNotFound):
+        loader.load("x.json")
+
+@pytest.mark.jsonloader
 def test_load_single_valid_with_path(tmp_path):
     """Loader should accept Path objects for filename and base path."""
     data = {"foo": 1}
@@ -221,6 +227,16 @@ def test_load_multiple_valid_with_paths(tmp_path):
     assert isinstance(result, dict)
     assert result["a.json"] == a
     assert result["b.json"] == b
+
+
+def test_single_file_one_item_list(tmp_path):
+    data = {"v": 1}
+    fp = tmp_path / "one.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    loader = JSONLoader(base_path=tmp_path)
+    result = loader.load(["one.json"])
+    assert result == data
 
 #-------------------------------------------
 # Test JSONloader _normalize function
@@ -270,5 +286,9 @@ class TestNormalize:
         with pytest.raises(ValueError) as exc:
             loader._normalize(bad_input)
         assert f"got {type(bad_input)}" in str(exc.value)
+
+    def test_normalize_empty_list_raises(self, loader):
+        with pytest.raises(ValueError):
+            loader._normalize([])
 
     

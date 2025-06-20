@@ -224,6 +224,64 @@ def test_set_config_file_forces_reload(monkeypatch):
     assert got['filenames']       == new_name
 
 
+def test_get_logger_for_function_and_method(monkeypatch):
+    """get_logger should build names for functions and bound methods."""
+    reload_logger_module()
+
+    class Sample:
+        def method(self):
+            pass
+
+    def sample_function():
+        pass
+    class DummyLoader:
+        def __init__(self, *a, **k):
+            pass
+        def load(self):
+            return {"version":1,"disable_existing_loggers":False,
+                    "handlers":{}, "loggers":{}}
+
+    monkeypatch.setattr('util.config.loaders.JSONLoader', DummyLoader, raising=True)
+    monkeypatch.setattr(logging.config, 'dictConfig', lambda cfg: None)
+
+    log_func = Logger.get_logger(sample_function)
+    expected_func_name = f"{sample_function.__module__}.{sample_function.__qualname__}"
+    assert log_func.name == expected_func_name
+
+    inst = Sample()
+    log_method = Logger.get_logger(inst.method)
+    expected_method = f"{inst.method.__module__}.{inst.method.__qualname__}"
+    assert log_method.name == expected_method
+
+
+def test_set_config_file_thread_safe(monkeypatch):
+    """Concurrent set_config_file calls should be safe."""
+    reload_logger_module()
+
+    class DummyCM:
+        def __init__(self, base_path, filenames):
+            self.base_path = base_path
+            self.filenames = filenames
+        def load(self):
+            return {"version":1,"disable_existing_loggers":False,
+                    "handlers":{},"loggers":{}}
+
+    monkeypatch.setattr('util.config.manager.ConfigManager', DummyCM, raising=True)
+    monkeypatch.setattr(logging.config, 'dictConfig', lambda cfg: None)
+
+    def worker(i):
+        Logger.set_config_file(f"c{i}.json", f"/tmp/p{i}")
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    Logger.get_logger("after")
+    assert Logger._instance is not None
+
+
 def test_loader_exception_does_not_remove_bootstrap(monkeypatch, caplog):
     """
     If JSONLoader.load raises an exception, the bootstrap StreamHandler should remain.
@@ -236,9 +294,10 @@ def test_loader_exception_does_not_remove_bootstrap(monkeypatch, caplog):
             raise RuntimeError("boom")
     monkeypatch.setattr('util.config.loaders.JSONLoader', BadLoader, raising=True)
 
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.INFO)
     Logger.get_logger("fail")
     assert "Failed to load logging configuration" in caplog.text
+    assert isinstance(Logger._instance._last_error, Exception)
 
     # Bootstrap StreamHandler is still present
     handlers = [h for h in root.handlers if type(h) is logging.StreamHandler]
@@ -260,6 +319,29 @@ def test_loader_exception_does_not_remove_bootstrap(monkeypatch, caplog):
     Logger.get_logger("retry")
     assert len(calls) == 1
     assert Logger._instance._is_configured
+    assert Logger._instance._last_error is None
+
+
+def test_fallback_after_multiple_failures(monkeypatch, caplog):
+    """After several failed configuration attempts, a fallback config is used."""
+    reload_logger_module()
+
+    class BadLoader:
+        def __init__(self, *a, **k):
+            pass
+        def load(self):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr('util.config.loaders.JSONLoader', BadLoader, raising=True)
+
+    caplog.set_level(logging.INFO)
+
+    for _ in range(3):
+        Logger.get_logger("fail")
+
+    assert "Applied fallback logging configuration" in caplog.text
+    assert Logger._instance._is_configured
+
 
 def test_thread_safe_logger_singleton(monkeypatch):
     """Concurrent get_logger calls should configure only once."""
@@ -293,3 +375,24 @@ def test_thread_safe_logger_singleton(monkeypatch):
     assert len(set(id(i) for i in instances)) == 1
     assert call_count == 1
     Logger._instance = None
+
+def test_use_config_context_manager(monkeypatch):
+    """use_config should temporarily change the config file."""
+    reload_logger_module()
+
+    class DummyLoader:
+        def __init__(self, base_path, filenames):
+            self.base_path = base_path
+            self.filenames = filenames
+        def load(self):
+            return {"version":1,"disable_existing_loggers":False,"handlers":{},"loggers":{}}
+
+    monkeypatch.setattr('util.config.loaders.JSONLoader', DummyLoader, raising=True)
+
+    with Logger.use_config('temp.json', Path('/tmp')):
+        Logger.get_logger('ctx')
+        assert Logger._instance._config_name == 'temp.json'
+        assert Logger._instance._config_path == Path('/tmp')
+
+    assert Logger._instance._config_name == DEFAULT_CONFIG_NAME
+    assert Logger._instance._config_path == DEFAULT_CONFIG_PATH

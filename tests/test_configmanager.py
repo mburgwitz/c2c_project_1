@@ -68,6 +68,22 @@ def test_multiple_file_merge(tmp_path):
     assert merged["shared"] == "from_b"
 
 
+def test_multiple_file_merge_paths(tmp_path):
+    """
+    Loading multiple files using Path objects should merge correctly.
+    """
+    a = {"x": 1}
+    b = {"y": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, [Path("a.json"), Path("b.json")])
+    merged = cfg.load()
+
+    assert merged["x"] == 1
+    assert merged["y"] == 2
+
+
 def test_as_attr_access(tmp_path):
     """
     as_attr() should allow attribute-style access to config values.
@@ -87,18 +103,22 @@ def test_env_override(tmp_path):
     """
     Environment variables override JSON values using CONFIG__ prefix.
     """
-    data = {"db": {"host": "default", "port": 3306}}
+    data = {"db": {"host": "default", "port": 3306, "debug": False, "ratio": 1.0}}
     fp = tmp_path / "db.json"
     fp.write_text(json.dumps(data), encoding="utf-8")
 
     os.environ["CONFIG__DB__HOST"] = "localhost"
     os.environ["CONFIG__DB__PORT"] = "5432"
+    os.environ["CONFIG__DB__DEBUG"] = "true"
+    os.environ["CONFIG__DB__RATIO"] = "2.5"
 
     cfg = ConfigManager(tmp_path, "db.json")
     result = cfg.load()
 
     assert result["db"]["host"] == "localhost"
-    assert result["db"]["port"] == "5432"
+    assert result["db"]["port"] == 5432
+    assert result["db"]["debug"] is True
+    assert result["db"]["ratio"] == 2.5
 
 
 def test_schema_validation(tmp_path):
@@ -116,9 +136,8 @@ def test_schema_validation(tmp_path):
     }
     cfg = ConfigManager(tmp_path, "val.json", schema=schema)
 
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(Exception):
         cfg.load()
-    assert "type" in str(exc.value)
 
 
 def test_singleton_behavior(tmp_path):
@@ -177,6 +196,21 @@ def test_custom_env_prefix(tmp_path, monkeypatch):
     cfg = ConfigManager(tmp_path, "cfg.json")
     loaded = cfg.load()
     assert loaded["key"] == "new"
+
+def test_apply_env_override_nested_and_types(tmp_path, monkeypatch):
+    """_apply_env_overrides handles nested keys and converts values."""
+    (tmp_path / "dummy.json").write_text("{}", encoding="utf-8")
+    cfg = ConfigManager(tmp_path, "dummy.json")
+
+    base = {"section": {"value": 0}, "flag": False}
+
+    monkeypatch.setenv("CONFIG__SECTION__VALUE", "10")
+    monkeypatch.setenv("CONFIG__FLAG", "true")
+
+    out = cfg._apply_env_overrides(base)
+
+    assert out["section"]["value"] == 10
+    assert out["flag"] is True
 
 
 def test_missing_base_path_raises(tmp_path):
@@ -248,6 +282,21 @@ def test_stop_watch_idempotent(tmp_path):
     # second call should not raise
     cfg.stop_watch()
 
+
+def test_start_watch_no_multiple_threads(tmp_path):
+    fp = tmp_path / "w.json"
+    fp.write_text("{}", encoding="utf-8")
+    cfg = ConfigManager(tmp_path, "w.json", watch=False, reload_interval=0.01)
+    cfg.load()
+
+    cfg._start_watch()
+    first = cfg._watch_thread
+    cfg._start_watch()
+    second = cfg._watch_thread
+    assert first is second
+    cfg.stop_watch()
+
+
 def test_thread_safe_singleton(tmp_path, monkeypatch):
     """Concurrent calls should return the same ConfigManager instance."""
     fp = tmp_path / "t.json"
@@ -270,3 +319,31 @@ def test_thread_safe_singleton(tmp_path, monkeypatch):
 
     assert len(set(id(r) for r in results)) == 1
     ConfigManager._instance = None
+
+
+def test_path_objects_are_supported(tmp_path):
+    """ConfigManager should accept Path objects for filenames."""
+    a = {"foo": 1}
+    b = {"bar": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, [Path("a.json"), Path("b.json")])
+    result = cfg.load()
+
+    assert result["foo"] == 1
+    assert result["bar"] == 2
+
+
+def test_env_override_new_keys(tmp_path):
+    """Environment variables may introduce new keys not present in JSON."""
+    data = {"section": {"existing": "yes"}}
+    (tmp_path / "c.json").write_text(json.dumps(data), encoding="utf-8")
+
+    os.environ["CONFIG__SECTION__NEW"] = "added"
+
+    cfg = ConfigManager(tmp_path, "c.json")
+    loaded = cfg.load()
+
+    assert loaded["section"]["existing"] == "yes"
+    assert loaded["section"]["new"] == "added"

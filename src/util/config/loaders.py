@@ -76,8 +76,18 @@ class JSONLoader:
     filenames : str or list of str or None
         Default filename or list of filenames to load if `load()` is called without arguments.
     """
-    def __init__(self, base_path: Union[str, Path], 
+    def __init__(self, base_path: Union[str, Path],
                  filenames: Union[str, Path, List[Union[str, Path]]] = None) -> None:
+        """Create a new ``JSONLoader``.
+
+        Parameters
+        ----------
+        base_path : str or Path
+            Directory from which JSON files will be loaded.
+        filenames : str or Path or list, optional
+            Optional default filename(s) used when ``load`` is called without an
+            argument.
+        """
         # normalize base_path to Path
         if isinstance(base_path, Path):
             logger.debug("base_path is already of type Path. assigning")
@@ -97,19 +107,20 @@ class JSONLoader:
                      base_path, filenames)
 
     def _normalize(self, filenames: Union[str, Path, List[Union[str, Path]]]) -> List[Path]:
-        """ Normalize a filename or list of filenames into a list of Paths
+        """Normalize a filename or list of filenames into a list of `Path` objects.
 
         Parameters
         ----------
-        filenames : str or list of str
-            A single filename or a list of filenames.  
-            - If a `str` is provided, it will be wrapped into a one-element list.  
-            - If a `list`, each element must be a `str`.
+         filenames : str, Path or list
+            A single filename or a list of filenames. `Path` objects are
+            accepted as well. If a string is provided it is wrapped in a
+            one-element list. When a list is provided each element must be a
+            `str` or `Path`.
             
         Returns
         -------
-        List[str]
-            The normalized and checked list of filenames
+        List[Path]
+            The normalized and validated list of filenames as `Path` objects.
 
         Raises
         ------
@@ -122,12 +133,17 @@ class JSONLoader:
         
         elif isinstance(filenames, list):
             logger.debug("filenames is a list. normalizing items")
+
+            if not filenames:
+                raise ValueError("filenames list must not be empty")
+            
             if not all(isinstance(item, (str, Path)) for item in filenames):
                 bad_types = {type(item) for item in filenames if not isinstance(item, (str, Path))}
                 raise ValueError(
                     f"All items in filenames list must be str or Path, "
                     f"but found types: {bad_types}"
                 )
+    
             logger.debug("filenames list normalized to Paths")
             return [Path(item) for item in filenames]
 
@@ -177,6 +193,10 @@ class JSONLoader:
                 files = self.filenames
         else:
             files = self._normalize(filenames)
+
+         # fail early if base_path is not a directory that exists
+        if not self.base_path.exists() or not self.base_path.is_dir():
+            raise FileNotFound(self.base_path)
         
         results: Dict[str,Any] = {}
 
