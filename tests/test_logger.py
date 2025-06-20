@@ -396,3 +396,27 @@ def test_use_config_context_manager(monkeypatch):
 
     assert Logger._instance._config_name == DEFAULT_CONFIG_NAME
     assert Logger._instance._config_path == DEFAULT_CONFIG_PATH
+
+def test_use_config_restores_on_exception(monkeypatch):
+    """use_config should restore config even if an exception is raised."""
+    reload_logger_module()
+
+    class DummyLoader:
+        def __init__(self, base_path, filenames):
+            self.base_path = base_path
+            self.filenames = filenames
+        def load(self):
+            return {"version":1,"disable_existing_loggers":False,
+                    "handlers":{},"loggers":{}}
+
+    monkeypatch.setattr('util.config.loaders.JSONLoader', DummyLoader, raising=True)
+
+    with pytest.raises(RuntimeError):
+        with Logger.use_config('temp.json', Path('/tmp')):
+            Logger.get_logger('ctx')
+            assert Logger._instance._config_name == 'temp.json'
+            assert Logger._instance._config_path == Path('/tmp')
+            raise RuntimeError("boom")
+
+    assert Logger._instance._config_name == DEFAULT_CONFIG_NAME
+    assert Logger._instance._config_path == DEFAULT_CONFIG_PATH

@@ -140,6 +140,26 @@ def test_schema_validation(tmp_path):
         cfg.load()
 
 
+def test_schema_validation_missing_jsonschema(tmp_path, monkeypatch):
+    """load() should raise RuntimeError if jsonschema is missing."""
+    (tmp_path / "val.json").write_text(json.dumps({"v": 1}), encoding="utf-8")
+    schema = {"type": "object"}
+    cfg = ConfigManager(tmp_path, "val.json", schema=schema)
+
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "jsonschema":
+            raise ImportError("no jsonschema")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(RuntimeError):
+        cfg.load()
+
+
 def test_singleton_behavior(tmp_path):
     """
     ConfigManager should return the same instance across calls.
@@ -406,3 +426,19 @@ def test_load_override_filenames(tmp_path):
 
     merged = cfg.load(filenames=["a.json", "b.json"])
     assert merged["a"] == 1 and merged["b"] == 2
+
+
+def test_reset_instance_stops_watch_thread(tmp_path):
+    """reset_instance() should stop any running watch thread."""
+    fp = tmp_path / "w.json"
+    fp.write_text("{}", encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "w.json", watch=True, reload_interval=0.01)
+
+    assert cfg.is_watching()
+    thread = cfg._watch_thread
+
+    ConfigManager.reset_instance()
+
+    assert ConfigManager._instance is None
+    assert not thread.is_alive()

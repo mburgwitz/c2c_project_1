@@ -530,7 +530,13 @@ class ConfigManager:
                         continue
                 try:
                     mtime = path.stat().st_mtime
-                except Exception:
+                except Exception as e:
+                    logger.error(
+                        "Error reading mtime for %s while watching config %s: %s",
+                        path,
+                        name,
+                        e,
+                    )
                     continue
                 if mtime != st["mtimes"].get(str(fname)):
                     logger.info("Detected change in %s, reloading config %s", fname, name)
@@ -569,8 +575,17 @@ class ConfigManager:
             self.stop_watch()
 
 class _AttrWrapper:
-    """
-    Simple wrapper to access dict keys as attributes.
+    """Wrapper to access dictionary keys as attributes.
+
+    This implementation recursively wraps nested dictionaries so that
+    ``cfg.foo.bar`` works for any depth. The object still behaves like a
+    mapping via ``__getitem__`` for backward compatibility.
     """
     def __init__(self, d: Dict[str, Any]) -> None:
-        self.__dict__.update(d)
+        for key, value in d.items():
+            if isinstance(value, dict):
+                value = _AttrWrapper(value)
+            self.__dict__[key] = value
+
+    def __getitem__(self, item: str) -> Any:
+        return self.__dict__[item]
