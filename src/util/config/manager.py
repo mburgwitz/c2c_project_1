@@ -17,8 +17,8 @@ class ConfigManager:
 
     Attributes
     ----------
-    base_path : pathlib.Path
-        Directory where config files reside.
+    base_paths : list[pathlib.Path]
+        One or more directories where config files reside.
     filenames : Union[str, Path, List[Union[str, Path]]]
         Filename or ordered list of JSON filenames to load and merge. Strings
         are converted to `Path` objects when loading.
@@ -45,7 +45,7 @@ class ConfigManager:
     @classmethod
     def get_manager(
         cls,
-        base_path: Union[str, Path],
+        base_path: Union[str, Path, List[Union[str, Path]]],
         filenames: Union[str, Path, List[Union[str, Path]]],
         schema: Optional[Dict[str, Any]] = None,
         watch: bool = False,
@@ -55,8 +55,9 @@ class ConfigManager:
 
         Parameters
         ----------
-        base_path : Union[str, Path]
-            Directory where the config files reside.
+        base_path : Union[str, Path, List[Union[str, Path]]]
+            One or multiple directories where the config files reside. If a
+            list is provided the directories are searched in order.
         filenames : Union[str, Path, List[Union[str, Path]]]
             Filename or list of filenames to load.
         schema : Optional[Dict[str, Any]]
@@ -84,7 +85,7 @@ class ConfigManager:
             cls._instance = None
 
     def __new__(cls,
-                base_path: Union[str, Path],
+                base_path: Union[str, Path, List[Union[str, Path]]],
                 filenames: Union[str, Path, List[Union[str, Path]]],
                 *args, **kwargs
     ) -> 'ConfigManager':
@@ -95,7 +96,7 @@ class ConfigManager:
 
     def __init__(
         self,
-        base_path: Union[str, Path],
+        base_path: Union[str, Path, List[Union[str, Path]]],
         filenames: Union[str, Path, List[Union[str, Path]]],
         schema: Optional[Dict[str, Any]] = None,
         watch: bool = False,
@@ -106,11 +107,21 @@ class ConfigManager:
             return
         self._initialized = True
 
-        # Normalize and validate base_path
-        self.base_path = Path(base_path)
-        if not self.base_path.exists():
-            logger.error("Config directory does not exist: %s", self.base_path)
-            raise FileNotFoundError(f"Config directory not found: {self.base_path}")
+        # Normalize and validate base paths
+        if isinstance(base_path, (str, Path)):
+            base_paths = [Path(base_path)]
+        else:
+            base_paths = [Path(p) for p in base_path]
+
+        for p in base_paths:
+            if not p.exists():
+                logger.error("Config directory does not exist: %s", p)
+                raise FileNotFoundError(f"Config directory not found: {p}")
+
+        self.base_paths = base_paths
+        # keep the first path for backward compatibility
+        self.base_path = base_paths[0]
+        logger.debug("Base paths set to %s", self.base_paths)
 
         # Store parameters
         self.filenames = filenames
@@ -131,8 +142,8 @@ class ConfigManager:
 
 
         logger.debug(
-            "ConfigManager initialized with path=%s, files=%s, watch=%s",
-            self.base_path, self.filenames, self.watch
+            "ConfigManager initialized with paths=%s, files=%s, watch=%s",
+            self.base_paths, self.filenames, self.watch
         )
 
         # For watch mode, load immediately then start watcher
@@ -163,6 +174,7 @@ class ConfigManager:
             "base_config": {},
             "config": {},
             "mtimes": {},
+            "file_paths": {},
             "watch_thread": None,
             "stop_event": threading.Event(),
             "config_loaded": False,
@@ -179,6 +191,7 @@ class ConfigManager:
         self.reload_interval = st["reload_interval"]
         self._config = st["config"]
         self._mtimes = st["mtimes"]
+        self._file_paths = st.get("file_paths", {})
         self._watch_thread = st["watch_thread"]
         self._stop_event = st["stop_event"]
         self._config_loaded = st["config_loaded"]
@@ -197,6 +210,7 @@ class ConfigManager:
         st["config"] = self._config
         st["base_config"] = st.get("base_config", {})
         st["mtimes"] = self._mtimes
+        st["file_paths"] = getattr(self, "_file_paths", {})
         st["watch_thread"] = self._watch_thread
         st["stop_event"] = self._stop_event
         st["config_loaded"] = self._config_loaded
@@ -221,6 +235,7 @@ class ConfigManager:
         if schema is None:
             schema = self.schema
         self._create_state(name, filenames, schema, watch, reload_interval)
+        logger.info("Added configuration '%s' with files %s", name, filenames)
         if watch:
             self.load(name)
             self.start_watch(name)
@@ -233,6 +248,7 @@ class ConfigManager:
         self._sync_to_state(self._active)
         self._active = name
         self._sync_from_state(name)
+        logger.info("Active configuration switched to '%s'", name)
 
     def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
         """Merge ``source`` config into ``target`` config."""
@@ -247,6 +263,7 @@ class ConfigManager:
             self._merge_map[target].append(source)
         if target == self._active:
             self._config = merged
+        logger.info("Merged config '%s' into '%s'", source, target)
         return merged
 
     def _apply_merges_for(self, name: str) -> None:
@@ -266,7 +283,24 @@ class ConfigManager:
         if target == self._active:
             self._config = merged
 
-    def load(self, name: Optional[str] = None) -> Dict[str, Any]:
+    def _resolve_file(self, filename: Union[str, Path]) -> Path:
+        """Return the full path for ``filename`` searching all base paths."""
+        f = Path(filename)
+        if f.is_absolute() and f.exists():
+            return f
+        for base in self.base_paths:
+            candidate = base / f
+            if candidate.exists():
+                return candidate
+        # not found - return path in first base for error context
+        from util.config.loaders import FileNotFound
+        raise FileNotFound(self.base_paths[0] / f)
+
+    def load(
+        self,
+        name: Optional[str] = None,
+        filenames: Optional[Union[str, Path, List[Union[str, Path]]]] = None,
+    ) -> Dict[str, Any]:
         """
         Load and merge JSON config files, validate, apply ENV overrides.
 
@@ -286,34 +320,46 @@ class ConfigManager:
             name = self._active
         st = self._states[name]
 
-        with self.__class__._lock:
-            logger.info("Loading configuration files (%s): %s", name, st["filenames"])
-            try:
-                from util.config.loaders import JSONLoader
-                # names = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
-                # names = [Path(n) for n in names]
-                names = st["filenames"]
-                loader = JSONLoader(self.base_path, names)
-                raw = loader.load()
-            except Exception as e:
-                logger.error("Loading configuration files failed: %s", e)
-                raise
+        # allow overriding filenames on this load call
+        if filenames is not None:
+            if isinstance(filenames, (str, Path)):
+                names = [Path(filenames)]
+            else:
+                names = [Path(f) for f in filenames]
+            st["filenames"] = names
+        else:
+            names = st["filenames"]
 
-            # Normalize filenames to list of strings
-            # if isinstance(self.filenames, (str, Path)):
-            #     filenames = [str(self.filenames)]
-            # else:
-            #     filenames = [str(n) for n in self.filenames]
-            filenames = [str(n) for n in names]
+        with self.__class__._lock:
+            logger.info("Loading configuration files (%s): %s", name, [str(n) for n in names])
+            from util.config.loaders import JSONLoader
+            sections: Dict[str, Any] = {}
+            st["file_paths"] = {}
+
+            for fname in names:
+                try:
+                    path = self._resolve_file(fname)
+                except Exception as e:
+                    logger.error("Failed to resolve %s: %s", fname, e)
+                    raise
+
+                logger.info("Loading %s", path)
+                loader = JSONLoader(path.parent, path.name)
+                try:
+                    data = loader.load()
+                except Exception as e:
+                    logger.error("Loading configuration file %s failed: %s", path, e)
+                    raise
+                sections[str(fname)] = data
+                st["file_paths"][str(fname)] = path
 
             # Merge multiple files into one dict
-            files = [filenames] if isinstance(filenames, (str, Path)) else filenames
-            if isinstance(raw, dict) and set(raw.keys()) == set(files):
-                merged: Dict[str, Any] = {}
-                for section in raw.values():
-                    merged.update(section)
+            if len(sections) == 1:
+                merged = next(iter(sections.values()))
             else:
-                merged = raw
+                merged = {}
+                for sec in sections.values():
+                    merged.update(sec)
 
             # Validate against JSON Schema if provided
             if self.schema is not None:
@@ -334,8 +380,7 @@ class ConfigManager:
 
             # Record file mtimes for hot-reload checks
             st["mtimes"] = {}
-            for fn in files:
-                path = self.base_path / fn
+            for fn, path in st["file_paths"].items():
                 try:
                     st["mtimes"][fn] = path.stat().st_mtime
                 except OSError:
@@ -476,7 +521,13 @@ class ConfigManager:
             time.sleep(st["reload_interval"])
             names = st["filenames"]
             for fname in names:
-                path = self.base_path / fname
+                path = st.get("file_paths", {}).get(str(fname))
+                if path is None:
+                    try:
+                        path = self._resolve_file(fname)
+                        st.setdefault("file_paths", {})[str(fname)] = path
+                    except Exception:
+                        continue
                 try:
                     mtime = path.stat().st_mtime
                 except Exception:

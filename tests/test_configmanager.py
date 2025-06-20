@@ -381,3 +381,28 @@ def test_merge_and_hot_change(tmp_path):
     assert cfg.get("other") == 99
     cfg.stop_watch()
     cfg.stop_watch("b")
+
+
+def test_load_with_multiple_base_paths(tmp_path):
+    """Files can be located in any of the provided base paths."""
+    dir1 = tmp_path / "p1"
+    dir2 = tmp_path / "p2"
+    dir1.mkdir()
+    dir2.mkdir()
+    (dir2 / "c.json").write_text(json.dumps({"val": 42}), encoding="utf-8")
+
+    cfg = ConfigManager([dir1, dir2], "c.json")
+    data = cfg.load()
+    assert data["val"] == 42
+
+
+def test_load_override_filenames(tmp_path):
+    """load() accepts explicit filenames overriding the stored list."""
+    (tmp_path / "a.json").write_text(json.dumps({"a": 1}), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps({"b": 2}), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "a.json")
+    cfg.load()
+
+    merged = cfg.load(filenames=["a.json", "b.json"])
+    assert merged["a"] == 1 and merged["b"] == 2
