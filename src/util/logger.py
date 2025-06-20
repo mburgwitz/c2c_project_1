@@ -111,18 +111,6 @@ class Logger:
                 # import here and not on module layer to avoid circular imports
                 from util.config.manager import ConfigManager
 
-                # Ensure a fresh ConfigManager instance for loading logging config
-                # ConfigManager._instance = None
-                # cfg = ConfigManager(
-                #     base_path=self._config_path,
-                #     filenames=self._config_name
-                # )
-
-                # ConfigManager.reset_instance()
-                # cfg = ConfigManager.get_manager(
-                #     base_path=self._config_path,
-                #     filenames=self._config_name
-                # )
                 if hasattr(ConfigManager, "reset_instance"):
                     ConfigManager.reset_instance()
                 else:
@@ -169,7 +157,7 @@ class Logger:
                 # Bootstrap handlers stays active
                 failed_path = Path(self._config_path) / self._config_name
                 logging.error(
-                    f"Failed to load logging configuration '{failed_path}': {e}"
+                    f"Failed to load logging configuration '{failed_path}': {e}\n"
                     "Using bootstrap logging."
                 )
                 self._failed_attempts += 1

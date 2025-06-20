@@ -1,5 +1,6 @@
 from basisklassen import FrontWheels, BackWheels
 from util.logger import Logger
+from util.config.manager import ConfigManager
 
 class BaseCar:
     """ Provides basic driving functionality.
@@ -25,15 +26,26 @@ class BaseCar:
 
     # Standardkonstruktor der Klasse
     def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
-        self.__steering_angle = steering_angle
-        self.__speed = speed
-        self.__direction = direction  
+        log = Logger.get_logger("BaseCar") 
+        log.debug('initialize BaseCar')
+        
+        log.debug('load config')
+        cfg = ConfigManager.get_manager('./config', 'logging.json')
+        cfg.add_config('car', 'car_initial_values.json')
+        cfg.set_active('car')
+        cfg = cfg.load()  
+
+
+        self.__steering_angle = self.__checkSteeringAngle(cfg.get('steering_angle'))
+        self.__speed = self.__checkSpeed(cfg.get('speed'))
+        self.__direction = 1 if self.__speed > 0 else {-1 if self.__speed < 0 else 0}  
+
+        log.debug(f'imported steering_angle: {self.__steering_angle}, speed: {self.__speed} and got direction {self.__direction}')
+
         self.__fw = FrontWheels()
-        self.__bw = BackWheels()     
+        self.__bw = BackWheels()             
 
-        self.__logger = Logger.get_logger(BaseCar) 
-
-        self.__logger.info("init finished")
+        log.info("init finished")
 
     #------------------------------------
     # properties

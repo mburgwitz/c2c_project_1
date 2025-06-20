@@ -5,10 +5,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from util.logger import Logger
-
-logger = Logger.get_logger(__name__)
-
 class ConfigManager:
     """
     Centralized configuration manager that loads and merges JSON config files,
@@ -107,6 +103,9 @@ class ConfigManager:
             return
         self._initialized = True
 
+        from util.logger import Logger
+        self.logger = Logger.get_logger(__name__)
+
         # Normalize and validate base paths
         if isinstance(base_path, (str, Path)):
             base_paths = [Path(base_path)]
@@ -115,13 +114,13 @@ class ConfigManager:
 
         for p in base_paths:
             if not p.exists():
-                logger.error("Config directory does not exist: %s", p)
+                self.logger.error("Config directory does not exist: %s", p)
                 raise FileNotFoundError(f"Config directory not found: {p}")
 
         self.base_paths = base_paths
         # keep the first path for backward compatibility
         self.base_path = base_paths[0]
-        logger.debug("Base paths set to %s", self.base_paths)
+        self.logger.debug("Base paths set to %s", self.base_paths)
 
         # Store parameters
         self.filenames = filenames
@@ -141,7 +140,7 @@ class ConfigManager:
         self._sync_from_state("default")
 
 
-        logger.debug(
+        self.logger.debug(
             "ConfigManager initialized with paths=%s, files=%s, watch=%s",
             self.base_paths, self.filenames, self.watch
         )
@@ -235,7 +234,7 @@ class ConfigManager:
         if schema is None:
             schema = self.schema
         self._create_state(name, filenames, schema, watch, reload_interval)
-        logger.info("Added configuration '%s' with files %s", name, filenames)
+        self.logger.info("Added configuration '%s' with files %s", name, filenames)
         if watch:
             self.load(name)
             self.start_watch(name)
@@ -248,7 +247,7 @@ class ConfigManager:
         self._sync_to_state(self._active)
         self._active = name
         self._sync_from_state(name)
-        logger.info("Active configuration switched to '%s'", name)
+        self.logger.info("Active configuration switched to '%s'", name)
 
     def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
         """Merge ``source`` config into ``target`` config."""
@@ -263,7 +262,7 @@ class ConfigManager:
             self._merge_map[target].append(source)
         if target == self._active:
             self._config = merged
-        logger.info("Merged config '%s' into '%s'", source, target)
+        self.logger.info("Merged config '%s' into '%s'", source, target)
         return merged
 
     def _apply_merges_for(self, name: str) -> None:
@@ -331,7 +330,7 @@ class ConfigManager:
             names = st["filenames"]
 
         with self.__class__._lock:
-            logger.info("Loading configuration files (%s): %s", name, [str(n) for n in names])
+            self.logger.info("Loading configuration files (%s): %s", name, [str(n) for n in names])
             from util.config.loaders import JSONLoader
             sections: Dict[str, Any] = {}
             st["file_paths"] = {}
@@ -340,15 +339,15 @@ class ConfigManager:
                 try:
                     path = self._resolve_file(fname)
                 except Exception as e:
-                    logger.error("Failed to resolve %s: %s", fname, e)
+                    self.logger.error("Failed to resolve %s: %s", fname, e)
                     raise
 
-                logger.info("Loading %s", path)
+                self.logger.info("Loading %s", path)
                 loader = JSONLoader(path.parent, path.name)
                 try:
                     data = loader.load()
                 except Exception as e:
-                    logger.error("Loading configuration file %s failed: %s", path, e)
+                    self.logger.error("Loading configuration file %s failed: %s", path, e)
                     raise
                 sections[str(fname)] = data
                 st["file_paths"][str(fname)] = path
@@ -366,13 +365,13 @@ class ConfigManager:
                 try:
                     import jsonschema
                     jsonschema.validate(instance=merged, schema=self.schema)
-                    logger.debug("Configuration passed JSON Schema validation")
+                    self.logger.debug("Configuration passed JSON Schema validation")
                 except ImportError:
                     msg = "jsonschema library required for type validation"
-                    logger.error("Schema validation failed: %s", msg)
+                    self.logger.error("Schema validation failed: %s", msg)
                     raise RuntimeError(msg)
                 except Exception as e:
-                    logger.error("Schema validation failed: %s", e)
+                    self.logger.error("Schema validation failed: %s", e)
                     raise
 
             # Apply environment overrides
@@ -394,7 +393,7 @@ class ConfigManager:
 
             if name == self._active:
                 self._sync_from_state(name)
-            logger.info("Configuration loaded successfully")
+            self.logger.info("Configuration loaded successfully")
 
             return st["config"]
 
@@ -413,7 +412,7 @@ class ConfigManager:
                 parsed = json.loads(val)
             except Exception:
                 parsed = val
-            logger.debug("Applying env override %s = %s", keys, parsed)
+            self.logger.debug("Applying env override %s = %s", keys, parsed)
             typed_val = self._convert_env_value(val)
             self._set_deep(cfg, keys, typed_val)
         return cfg
@@ -449,7 +448,11 @@ class ConfigManager:
         Retrieve a config value by a sequence of nested keys.
 
         Example:
-            cfg.get("database", "host")
+            cfg = ConfigManager.get_manager('config', 'car.json')
+            angle = cfg.get('steering_angle')
+
+        A ``KeyError`` is raised if any key is missing in the loaded
+        configuration.
         """
         # Lazy load if not yet loaded
         if name is None:
@@ -510,7 +513,7 @@ class ConfigManager:
             self._watch_thread = thread
             self._stop_event = st["stop_event"]
         thread.start()
-        logger.info("Started config watch thread (interval=%.2fs) for %s", st["reload_interval"], name)
+        self.logger.info("Started config watch thread (interval=%.2fs) for %s", st["reload_interval"], name)
 
     def _watch_loop(self, name: str) -> None:
         """
@@ -531,7 +534,7 @@ class ConfigManager:
                 try:
                     mtime = path.stat().st_mtime
                 except Exception as e:
-                    logger.error(
+                    self.logger.error(
                         "Error reading mtime for %s while watching config %s: %s",
                         path,
                         name,
@@ -539,11 +542,11 @@ class ConfigManager:
                     )
                     continue
                 if mtime != st["mtimes"].get(str(fname)):
-                    logger.info("Detected change in %s, reloading config %s", fname, name)
+                    self.logger.info("Detected change in %s, reloading config %s", fname, name)
                     try:
                         self.load(name)
                     except Exception:
-                        logger.error("Error reloading config %s after change in %s", name, fname)
+                        self.logger.error("Error reloading config %s after change in %s", name, fname)
                     break
 
     def stop_watch(self, name: Optional[str] = None) -> None:
@@ -559,7 +562,7 @@ class ConfigManager:
         st["watch_thread"] = None
         if name == self._active:
             self._watch_thread = None
-        logger.info("Stopped config watch thread for %s", name)
+        self.logger.info("Stopped config watch thread for %s", name)
 
     # ------------------------------------------------------------------
     # Context manager interface

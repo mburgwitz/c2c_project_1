@@ -23,9 +23,14 @@
     },
   
     "loggers": {
-      "__main__": {
+      "BaseCar": {
         "handlers": ["console"],
-        "level": "INFO",
+        "level": "DEBUG",
+        "propagate": false
+      },
+      "SonicCar": {
+        "handlers": ["console"],
+        "level": "DEBUG",
         "propagate": false
       }
     }
