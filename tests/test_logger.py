@@ -1,4 +1,5 @@
 import logging
+import threading
 
 # used to reload util.logger module from scratch with importlib.reload
 import importlib
@@ -24,6 +25,11 @@ def reset_logging_and_singleton():
     Logger._instance = None # wipe existing Logger instance 
     Logger._config_name = DEFAULT_CONFIG_NAME
     Logger._config_path = DEFAULT_CONFIG_PATH
+
+    # Reset ConfigManager singleton to avoid cross-test pollution
+    from util.config.manager import ConfigManager
+    if hasattr(ConfigManager, "_instance"):
+        ConfigManager._instance = None
 
     # Remove only native StreamHandlers (keep pytest's capture handlers)
     # fetch root logger
@@ -103,9 +109,9 @@ def test_get_logger_string_and_dictconfig(monkeypatch):
 
     # Patch JSONLoader in util.config.loaders
     class DummyLoader:
-        def __init__(self, path, name):
-            called['path'] = path
-            called['name'] = name
+        def __init__(self, *, base_path, filenames):
+            called['path'] = base_path
+            called['name'] = filenames
         def load(self):
             return {
                 "version": 1,
@@ -114,7 +120,7 @@ def test_get_logger_string_and_dictconfig(monkeypatch):
                 "loggers": {}
             }
     monkeypatch.setattr(
-        'util.config.loaders.JSONLoader',
+        'util.config.manager.ConfigManager',
         DummyLoader,
         raising=True
     )
@@ -125,7 +131,7 @@ def test_get_logger_string_and_dictconfig(monkeypatch):
     # JSONLoader was constructed with DEFAULT_CONFIG_PATH and DEFAULT_CONFIG_NAME
     # convert the string DEFAULT_CONFIG_PATH to Path(DEFAULT_CONFIG_PATH)
     # because logger uses ConfigManager that converts all path str to Path
-    assert called['path'] == Path(DEFAULT_CONFIG_PATH)
+    assert called['path'] == DEFAULT_CONFIG_PATH
     assert called['name'] == DEFAULT_CONFIG_NAME
     assert isinstance(log, logging.Logger)
     assert log.name == "myapp"
@@ -237,3 +243,53 @@ def test_loader_exception_does_not_remove_bootstrap(monkeypatch, caplog):
     # Bootstrap StreamHandler is still present
     handlers = [h for h in root.handlers if type(h) is logging.StreamHandler]
     assert handlers, "Expected bootstrap StreamHandler to remain"
+
+    # configuration flag stays False
+    assert not Logger._instance._is_configured
+
+    # next call should attempt configuration again
+    calls = []
+    class GoodLoader:
+        def __init__(self, *args, **kwargs): pass
+        def load(self):
+            return {"version":1, "disable_existing_loggers":False,
+                    "handlers":{}, "loggers":{}}
+    monkeypatch.setattr('util.config.loaders.JSONLoader', GoodLoader, raising=True)
+    monkeypatch.setattr(logging.config, 'dictConfig', lambda cfg: calls.append(cfg))
+
+    Logger.get_logger("retry")
+    assert len(calls) == 1
+    assert Logger._instance._is_configured
+
+def test_thread_safe_logger_singleton(monkeypatch):
+    """Concurrent get_logger calls should configure only once."""
+    reload_logger_module()
+
+    call_count = 0
+
+    class DummyCM:
+        def __init__(self, *a, **k):
+            pass
+        def load(self):
+            nonlocal call_count
+            call_count += 1
+            return {"version":1,"disable_existing_loggers":False,"handlers":{},"loggers":{}}
+
+    monkeypatch.setattr('util.config.manager.ConfigManager', DummyCM, raising=True)
+    monkeypatch.setattr(logging.config, 'dictConfig', lambda cfg: None)
+
+    instances = []
+
+    def worker():
+        Logger.get_logger("x")
+        instances.append(Logger._instance)
+
+    threads = [threading.Thread(target=worker) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(set(id(i) for i in instances)) == 1
+    assert call_count == 1
+    Logger._instance = None

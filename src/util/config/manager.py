@@ -18,8 +18,9 @@ class ConfigManager:
     ----------
     base_path : pathlib.Path
         Directory where config files reside.
-    filenames : Union[str, List[str]]
-        Filename or ordered list of JSON filenames to load and merge.
+    filenames : Union[str, Path, List[Union[str, Path]]]
+        Filename or ordered list of JSON filenames to load and merge. Strings
+        are converted to `Path` objects when loading.
     schema : Optional[Dict[str, Any]]
         JSON Schema used to validate the merged configuration.
     watch : bool
@@ -38,20 +39,22 @@ class ConfigManager:
         Indicates whether the configuration has been loaded at least once.
     """
     _instance: Optional['ConfigManager'] = None
+    _lock = threading.Lock()
 
     def __new__(cls,
                 base_path: Union[str, Path],
-                filenames: Union[str, List[str]],
+                filenames: Union[str, Path, List[Union[str, Path]]],
                 *args, **kwargs
     ) -> 'ConfigManager':
-        if cls._instance is None:
-            cls._instance = super(ConfigManager, cls).__new__(cls)
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(ConfigManager, cls).__new__(cls)
         return cls._instance
 
     def __init__(
         self,
         base_path: Union[str, Path],
-        filenames: Union[str, List[str]],
+        filenames: Union[str, Path, List[Union[str, Path]]],
         schema: Optional[Dict[str, Any]] = None,
         watch: bool = False,
         reload_interval: float = 1.0
@@ -106,51 +109,54 @@ class ConfigManager:
         jsonschema.ValidationError
             If a schema is provided and validation fails.
         """
-        logger.info("Loading configuration files: %s", self.filenames)
-        try:
-            from util.config.loaders import JSONLoader
-            loader = JSONLoader(self.base_path, self.filenames)
-            raw = loader.load()
-        except Exception as e:
-            logger.error("Loading configuration files failed: %s", e)
-            raise
-
-        # Merge multiple files into one dict
-        files = [self.filenames] if isinstance(self.filenames, str) else self.filenames
-        if isinstance(raw, dict) and set(raw.keys()) == set(files):
-            merged: Dict[str, Any] = {}
-            for section in raw.values():
-                merged.update(section)
-        else:
-            merged = raw
-
-        # Validate against JSON Schema if provided
-        if self.schema is not None:
+        with self.__class__._lock:
+            logger.info("Loading configuration files: %s", self.filenames)
             try:
-                import jsonschema
-                jsonschema.validate(instance=merged, schema=self.schema)
-                logger.debug("Configuration passed JSON Schema validation")
+                from util.config.loaders import JSONLoader
+                names = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
+                names = [Path(n) for n in names]
+                loader = JSONLoader(self.base_path, names)
+                raw = loader.load()
             except Exception as e:
-                logger.error("Schema validation failed: %s", e)
+                logger.error("Loading configuration files failed: %s", e)
                 raise
 
-        # Apply environment overrides
-        merged = self._apply_env_overrides(merged)
+            # Merge multiple files into one dict
+            files = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
+            if isinstance(raw, dict) and set(raw.keys()) == set(files):
+                merged: Dict[str, Any] = {}
+                for section in raw.values():
+                    merged.update(section)
+            else:
+                merged = raw
 
-        # Record file mtimes for hot-reload checks
-        self._mtimes = {}
-        for fn in files:
-            path = self.base_path / fn
-            try:
-                self._mtimes[fn] = path.stat().st_mtime
-            except OSError:
-                self._mtimes[fn] = 0.0
+            # Validate against JSON Schema if provided
+            if self.schema is not None:
+                try:
+                    import jsonschema
+                    jsonschema.validate(instance=merged, schema=self.schema)
+                    logger.debug("Configuration passed JSON Schema validation")
+                except Exception as e:
+                    logger.error("Schema validation failed: %s", e)
+                    raise
 
-        # Cache and mark as loaded
-        self._config = merged
-        self._config_loaded = True
-        logger.info("Configuration loaded successfully")
-        return self._config
+            # Apply environment overrides
+            merged = self._apply_env_overrides(merged)
+
+            # Record file mtimes for hot-reload checks
+            self._mtimes = {}
+            for fn in files:
+                path = self.base_path / fn
+                try:
+                    self._mtimes[fn] = path.stat().st_mtime
+                except OSError:
+                    self._mtimes[fn] = 0.0
+
+            # Cache and mark as loaded
+            self._config = merged
+            self._config_loaded = True
+            logger.info("Configuration loaded successfully")
+            return self._config
 
     def _apply_env_overrides(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -215,7 +221,7 @@ class ConfigManager:
         """
         while not self._stop_event.is_set():
             time.sleep(self.reload_interval)
-            names = [self.filenames] if isinstance(self.filenames, str) else self.filenames
+            names = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
             for fname in names:
                 path = self.base_path / fname
                 try:

@@ -189,6 +189,38 @@ def test_catchall_wraps_unexpected(tmp_path, loader, monkeypatch):
     # je nach Implementation kann das LoaderError oder OSError sein
     assert "loading" in str(ei.value)
 
+@pytest.mark.jsonloader
+def test_load_directory_raises_file_not_found(tmp_path, loader):
+        dir_path = tmp_path / "dir"
+        dir_path.mkdir()
+        with pytest.raises(FileNotFound) as ei:
+            loader.load("dir")
+        assert ei.value.path == dir_path
+
+@pytest.mark.jsonloader
+def test_load_single_valid_with_path(tmp_path):
+    """Loader should accept Path objects for filename and base path."""
+    data = {"foo": 1}
+    fp = tmp_path / "p.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    loader = JSONLoader(base_path=str(tmp_path))
+    result = loader.load(Path("p.json"))
+    assert result == data
+
+
+@pytest.mark.jsonloader
+def test_load_multiple_valid_with_paths(tmp_path):
+    a = {"x": 1}
+    b = {"y": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    loader = JSONLoader(base_path=str(tmp_path))
+    result = loader.load([Path("a.json"), Path("b.json")])
+    assert isinstance(result, dict)
+    assert result["a.json"] == a
+    assert result["b.json"] == b
 
 #-------------------------------------------
 # Test JSONloader _normalize function
@@ -198,21 +230,20 @@ def test_catchall_wraps_unexpected(tmp_path, loader, monkeypatch):
 @pytest.mark.normalize_filenames
 class TestNormalize:
     def test_normalize_single_string(self, loader):
-        """"single filename str converted to List[str].
+        """"single filename str converted to List[Path].
         """
         out = loader._normalize("foo.json")
         assert isinstance(out, list)
-        assert isinstance(out[0], str)
-        assert out == ["foo.json"]
+        assert isinstance(out[0], Path)
+        assert out == [Path("foo.json")]
 
     def test_normalize_list_of_strings(self, loader):
-        """A List of str should get returned unchanged.
+        """A List of str is converted to Path but should get returned unchanged.
         """
         filenames = ["a.json", "b.json", "c.json"]
         out = loader._normalize(filenames)
         # object should stay the same
-        assert out is filenames
-        assert out == filenames
+        assert out == [Path(f) for f in filenames]
 
     def test_normalize_list_with_non_string(self, loader):
         """Throw ValueError because of non str elements.
@@ -222,7 +253,7 @@ class TestNormalize:
             loader._normalize(bad)
 
         msg = str(exc.value)
-        assert "must be str" in msg
+        assert "str or Path" in msg
         # check if wrong types returned correctly
         assert "<class 'int'>" in msg and "<class 'NoneType'>" in msg
 
@@ -234,8 +265,10 @@ class TestNormalize:
         object(),
     ])
     def test_normalize_invalid_type_raises(self, loader, bad_input):
-        """ Test different types (no str, no list) to get a ValueError.
+        """ Test different types (no str/Path, no list) to get a ValueError.
         """
         with pytest.raises(ValueError) as exc:
             loader._normalize(bad_input)
         assert f"got {type(bad_input)}" in str(exc.value)
+
+    

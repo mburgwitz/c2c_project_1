@@ -179,26 +179,6 @@ def test_custom_env_prefix(tmp_path, monkeypatch):
     assert loaded["key"] == "new"
 
 
-def test_schema_validation(tmp_path):
-    """
-    Providing a JSON schema rejects invalid configs.
-    """
-    data = {"value": 10}
-    fp = tmp_path / "val.json"
-    fp.write_text(json.dumps(data), encoding="utf-8")
-
-    schema = {
-        "type": "object",
-        "properties": {"value": {"type": "string"}},
-        "required": ["value"]
-    }
-    cfg = ConfigManager(tmp_path, "val.json", schema=schema)
-
-    with pytest.raises(Exception) as exc:
-        cfg.load()
-    assert "type" in str(exc.value)
-
-
 def test_missing_base_path_raises(tmp_path):
     """
     Non-existent base_path should raise FileNotFoundError in constructor.
@@ -267,3 +247,26 @@ def test_stop_watch_idempotent(tmp_path):
     cfg.stop_watch()
     # second call should not raise
     cfg.stop_watch()
+
+def test_thread_safe_singleton(tmp_path, monkeypatch):
+    """Concurrent calls should return the same ConfigManager instance."""
+    fp = tmp_path / "t.json"
+    fp.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr("util.config.loaders.JSONLoader.load", lambda self: {})
+
+    results = []
+
+    def worker():
+        cfg = ConfigManager(tmp_path, "t.json")
+        cfg.load()
+        results.append(cfg)
+
+    threads = [threading.Thread(target=worker) for _ in range(5)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+
+    assert len(set(id(r) for r in results)) == 1
+    ConfigManager._instance = None

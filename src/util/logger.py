@@ -1,10 +1,11 @@
 import logging, logging.config
 from typing import Any
 from pathlib import Path
+import threading
 
 # Default local config path and config name
 DEFAULT_CONFIG_NAME = "logging.json"
-DEFAULT_CONFIG_PATH = "./config/"
+DEFAULT_CONFIG_PATH = Path("./config/")
 
 # -------------------------------------------------------------
 # Bootstrap-Fallback: easy StreamHandler,
@@ -33,16 +34,17 @@ class Logger:
     _instance = None
     _config_name = DEFAULT_CONFIG_NAME
     _config_path = DEFAULT_CONFIG_PATH
+    _lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            #cls._instance = super(Logger, cls).__new__(cls, *args, **kwargs)
-            cls._instance = super().__new__(cls)
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self,
-                 config_name: str = 'logging.json',
-                 config_path: str = './config/') -> None:
+                 config_name: str = DEFAULT_CONFIG_NAME,
+                 config_path: Path = DEFAULT_CONFIG_PATH) -> None:
         
         # Prevent reinitialization of the singleton
         if getattr(self, '_initialized', False):
@@ -54,7 +56,7 @@ class Logger:
         self._initialized = True  # mark init done
 
     @classmethod
-    def set_config_file(cls, config_name: str, config_path: str) -> None:
+    def set_config_file(cls, config_name: str, config_path: Path) -> None:
         """
         Override the default logging config file path.
         Resets the loaded-state so the next get_logger triggers reload.
@@ -79,45 +81,52 @@ class Logger:
         Load and apply logging configuration once, using current config_name and config_path.
         Falls back to basicConfig on failure.
         """
-        if self._is_configured:
-            return
-        try:
-            # use ConfigManager to load the 'logging.json' once
-            # import here and not on module layer to avoid circular imports
-            from util.config.manager import ConfigManager
+        with self.__class__._lock:
+            if self._is_configured:
+                return
+            try:
+                # use ConfigManager to load the 'logging.json' once
+                # import here and not on module layer to avoid circular imports
+                from util.config.manager import ConfigManager
 
-            cfg = ConfigManager(
-                base_path=self._config_path,
-                filenames=self._config_name
-            )
-            config = cfg.load()
+                # Ensure a fresh ConfigManager instance for loading logging config
+                ConfigManager._instance = None
+                cfg = ConfigManager(
+                    base_path=self._config_path,
+                    filenames=self._config_name
+                )
+                config = cfg.load()
 
-            #config = read_and_parse_config(self._config_name, self._config_path)          
+                #config = read_and_parse_config(self._config_name, self._config_path)          
 
-            # get basic config looger for deletion
-            root = logging.getLogger()
+                # get basic config looger for deletion
+                root = logging.getLogger()
 
-            # delete all global filter
-            root.filters.clear()
+                # delete all global filter
+                root.filters.clear()
 
-            # deactivate all (child) logger
-            for _, lg in logging.Logger.manager.loggerDict.items():
-                if isinstance(lg, logging.Logger):
-                    lg.handlers.clear()
-                    lg.disabled = True
+                # deactivate all (child) logger
+                for _, lg in logging.Logger.manager.loggerDict.items():
+                    if isinstance(lg, logging.Logger):
+                        lg.handlers.clear()
+                        lg.disabled = True
 
-            # remove bootstrap handlers for a clean reconfigure with config file
-            for h in list(root.handlers):
-                root.removeHandler(h)
+                # remove bootstrap handlers for a clean reconfigure with config file
+                for h in list(root.handlers):
+                    root.removeHandler(h)
+                
+                # use the loaded config 
+                logging.config.dictConfig(config)
+
+                self._is_configured = True
+
+            except Exception as e:
+                # Bootstrap handlers stays active
+                failed_path = self._config_path / self._config_name
+                logging.error(
+                    f"Failed to load logging configuration '{failed_path}': {e}"
+                )
             
-            # use the loaded config 
-            logging.config.dictConfig(config)
-
-        except Exception as e:
-            # Bootstrap handlers stays active
-            logging.error(f"Failed to load logging configuration '{self._config_path + self._config_name}': {e}")
-        finally:
-            self._is_configured = True
 
     @classmethod
     def get_logger(cls, target: Any) -> logging.Logger:

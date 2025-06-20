@@ -76,7 +76,8 @@ class JSONLoader:
     filenames : str or list of str or None
         Default filename or list of filenames to load if `load()` is called without arguments.
     """
-    def __init__(self, base_path: Union[str,Path], filenames: Union[str,List[str]] = None) -> None:
+    def __init__(self, base_path: Union[str, Path], 
+                 filenames: Union[str, Path, List[Union[str, Path]]] = None) -> None:
         # normalize base_path to Path
         if isinstance(base_path, Path):
             logger.debug("base_path is already of type Path. assigning")
@@ -85,7 +86,7 @@ class JSONLoader:
             logger.debug("base_path is not of type Path. Converting to Path(base_path)")
             self.base_path = Path(base_path)
 
-        # normalize filenames to List[str] or None
+        # normalize filenames to List[Path] or None
         if filenames is not None:
             self.filenames = self._normalize(filenames)
         else:
@@ -95,8 +96,8 @@ class JSONLoader:
         logger.debug("JSONLoader initialized with base_path=%s filenames=%s",
                      base_path, filenames)
 
-    def _normalize(self, filenames: Union[str,List[str]]) -> List[str]:
-        """ Normalize a filename or list of filenames into a list of strings
+    def _normalize(self, filenames: Union[str, Path, List[Union[str, Path]]]) -> List[Path]:
+        """ Normalize a filename or list of filenames into a list of Paths
 
         Parameters
         ----------
@@ -113,36 +114,37 @@ class JSONLoader:
         Raises
         ------
         ValueError
-            If `filenames` is not a `str` or `list`, or if the list contains
-            any non-`str` elements
+            If `filenames` is neither a `str`/`Path` nor a list of those
         """
-        if isinstance(filenames, str):
-            logger.debug("filenames is of type str. Converting to List[str]")
-            return [filenames]
+        if isinstance(filenames, (str, Path)):
+            logger.debug("filenames is a str or Path. Converting to [Path]")
+            return [Path(filenames)]
         
         elif isinstance(filenames, list):
-            logger.debug("filenames is of type list. assigning")
-            if not all(isinstance(item, str) for item in filenames):
-                bad_types = {type(item) for item in filenames if not isinstance(item, str)}
+            logger.debug("filenames is a list. normalizing items")
+            if not all(isinstance(item, (str, Path)) for item in filenames):
+                bad_types = {type(item) for item in filenames if not isinstance(item, (str, Path))}
                 raise ValueError(
-                    f"All items in filenames list must be str, "
+                    f"All items in filenames list must be str or Path, "
                     f"but found types: {bad_types}"
                 )
-            logger.debug("filenames are already a list of str. assigning")
-            return filenames
+            logger.debug("filenames list normalized to Paths")
+            return [Path(item) for item in filenames]
 
         else:
             raise ValueError(
-                f"filenames must be str or list of str; got {type(filenames)}"
+                f"filenames must be str, Path or list; got {type(filenames)}"
             )
 
-    def load(self, filenames: Union[str,List[str], None] = None) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+    def load(self, 
+             filenames: Union[str, Path, List[Union[str, Path]], 
+             None] = None) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
         """
         Load one or more JSON files.
 
         Parameters
         ----------
-        filenames : str or list of str or None
+        filenames : str, Path, list or None
             Filename or list of filenames to load. If None, `self.filenames` is used.
 
         Returns
@@ -184,7 +186,7 @@ class JSONLoader:
 
             logger.debug("Attempting to read %s", file_path)
 
-            if not file_path.exists():
+            if not file_path.exists() or not file_path.is_file():
                 logger.error("File not found: %s", file_path)
                 raise FileNotFound(file_path)
             
@@ -213,7 +215,7 @@ class JSONLoader:
                 logger.critical("Unexpected error loading %s: %s", file_path, e)
                 raise LoaderError(f"Error loading {file_path}: {e}") from e
 
-            results[filename] = loaded_json
+            results[str(filename)] = loaded_json
 
         # only one file was specified 
         if len(results) == 1:
