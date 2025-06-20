@@ -221,36 +221,39 @@ class BaseCar:
 
 
 if __name__ == '__main__':
+
+    
+
     car = BaseCar()
 
-    import time
+    # import time
 
-    # Fahrmodus 1
-    car.drive(speed = 30)
-    time.sleep(3)
+    # # Fahrmodus 1
+    # car.drive(speed = 30)
+    # time.sleep(3)
     
-    car.stop()
-    time.sleep(1)
+    # car.stop()
+    # time.sleep(1)
 
-    car.drive(speed = 30)
-    time.sleep(3)
+    # car.drive(speed = 30)
+    # time.sleep(3)
 
-    car.stop()
+    # car.stop()
 
 
-    time.sleep(3)
-    # Fahrmodus 2
-    car.drive(speed = 30, angle= 90)
-    time.sleep(1)
+    # time.sleep(3)
+    # # Fahrmodus 2
+    # car.drive(speed = 30, angle= 90)
+    # time.sleep(1)
     
-    car.drive(angle = 135)
-    time.sleep(8)
+    # car.drive(angle = 135)
+    # time.sleep(8)
 
-    car.drive(speed=-30)
-    time.sleep(8)
+    # car.drive(speed=-30)
+    # time.sleep(8)
 
-    car.drive(angle= 90)
-    time.sleep(1)
+    # car.drive(angle= 90)
+    # time.sleep(1)
 
-    car.stop()
+    # car.stop()
     

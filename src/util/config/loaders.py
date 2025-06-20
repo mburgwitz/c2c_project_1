@@ -2,6 +2,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 import json
 
+# use logging to ensure basic loggin capability
+import logging
+# import ensures that the bootstrap logger is set up
+from util.logger import Logger
+# use the bootstrap logger
+logger = logging.getLogger(__name__)
+
 # Base class for loader related errors
 class LoaderError(Exception):
     """Base class for all related errors 
@@ -69,9 +76,65 @@ class JSONLoader:
     filenames : str or list of str or None
         Default filename or list of filenames to load if `load()` is called without arguments.
     """
-    def __init__(self, base_path: Path, filenames: Union[str,List[str]] = None) -> None:
-        self.base_path = base_path
-        self.filenames = filenames
+    def __init__(self, base_path: Union[str,Path], filenames: Union[str,List[str]] = None) -> None:
+        # normalize base_path to Path
+        if isinstance(base_path, Path):
+            logger.debug("base_path is already of type Path. assigning")
+            self.base_path = base_path
+        else:
+            logger.debug("base_path is not of type Path. Converting to Path(base_path)")
+            self.base_path = Path(base_path)
+
+        # normalize filenames to List[str] or None
+        if filenames is not None:
+            self.filenames = self._normalize(filenames)
+        else:
+            self.filenames = None
+            logger.debug("No filenames provided in __init__")
+
+        logger.debug("JSONLoader initialized with base_path=%s filenames=%s",
+                     base_path, filenames)
+
+    def _normalize(self, filenames: Union[str,List[str]]) -> List[str]:
+        """ Normalize a filename or list of filenames into a list of strings
+
+        Parameters
+        ----------
+        filenames : str or list of str
+            A single filename or a list of filenames.  
+            - If a `str` is provided, it will be wrapped into a one-element list.  
+            - If a `list`, each element must be a `str`.
+            
+        Returns
+        -------
+        List[str]
+            The normalized and checked list of filenames
+
+        Raises
+        ------
+        ValueError
+            If `filenames` is not a `str` or `list`, or if the list contains
+            any non-`str` elements
+        """
+        if isinstance(filenames, str):
+            logger.debug("filenames is of type str. Converting to List[str]")
+            return [filenames]
+        
+        elif isinstance(filenames, list):
+            logger.debug("filenames is of type list. assigning")
+            if not all(isinstance(item, str) for item in filenames):
+                bad_types = {type(item) for item in filenames if not isinstance(item, str)}
+                raise ValueError(
+                    f"All items in filenames list must be str, "
+                    f"but found types: {bad_types}"
+                )
+            logger.debug("filenames are already a list of str. assigning")
+            return filenames
+
+        else:
+            raise ValueError(
+                f"filenames must be str or list of str; got {type(filenames)}"
+            )
 
     def load(self, filenames: Union[str,List[str], None] = None) -> Union[Dict[str, Any], Dict[str, Dict[str, Any]]]:
         """
@@ -103,39 +166,51 @@ class JSONLoader:
         LoaderError
             For any other unexpected errors during loading.
         """
-
-        if filenames is None and self.filenames is None:
-            raise FileNotSpecified()
-        elif isinstance(filenames, str):
-            # to ensure the following iteration is over str and not str characters
-            files = [filenames]
+        if filenames is None:
+            if self.filenames is None:
+                logger.error("No filenames specified for JSONLoader.load()")
+                raise FileNotSpecified()
+            else:
+                # filenames was set in __init__
+                files = self.filenames
         else:
-            files = filenames if filenames is not None else self.filenames
+            files = self._normalize(filenames)
         
         results: Dict[str,Any] = {}
+
         for filename in files:
         
             file_path = self.base_path / filename
 
+            logger.debug("Attempting to read %s", file_path)
+
             if not file_path.exists():
+                logger.error("File not found: %s", file_path)
                 raise FileNotFound(file_path)
             
             try:
                 raw = file_path.read_text(encoding="utf-8")
                 loaded_json = json.loads(raw)
 
-            except json.JSONDecodeError as e:
+                logger.debug("Successfully parsed %s (%d bytes)",
+                             file_path, len(raw))
+
+            except json.JSONDecodeError as e:               
+                logger.error("JSON decode error in %s: %s", file_path, e)
                 raise FileFormatError(file_path, e) from e
             
             except PermissionError as e:
+                logger.error("Permission denied reading %s: %s", file_path, e)
                 raise FilePermissionError(file_path, e) from e
             
             except OSError as e:
                 # catch all other file /I/O-errors
+                logger.error("I/O error reading %s: %s", file_path, e)
                 raise FileIOError(file_path, e) from e
 
             except Exception as e:
                 # all other exceptions land here
+                logger.critical("Unexpected error loading %s: %s", file_path, e)
                 raise LoaderError(f"Error loading {file_path}: {e}") from e
 
             results[filename] = loaded_json

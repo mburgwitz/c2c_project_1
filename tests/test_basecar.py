@@ -6,6 +6,7 @@ from basecar import BaseCar
 def car():
     return BaseCar()
 
+@pytest.mark.basecar
 def test_speed(car):
     assert -100 == car.MIN_SPEED
     assert 100 == car.MAX_SPEED
@@ -25,7 +26,7 @@ def test_speed(car):
     car.speed = 150
     assert car.speed == car.MAX_SPEED
 
-
+@pytest.mark.basecar
 def test_steering_angle(car):
 
     assert 45 == car.MIN_STEERING_ANGLE

@@ -2,12 +2,26 @@ import logging, logging.config
 from typing import Any
 from pathlib import Path
 
-from .config_reader import read_and_parse_config
-
-# Default lokaler Pfad zur Logging-Konfiguration
+# Default local config path and config name
 DEFAULT_CONFIG_NAME = "logging.json"
 DEFAULT_CONFIG_PATH = "./config/"
 
+# -------------------------------------------------------------
+# Bootstrap-Fallback: easy StreamHandler,
+# for the case that no config was loaded already
+# -------------------------------------------------------------
+root = logging.getLogger()
+#if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+root = logging.getLogger()
+if not any(type(h) is logging.StreamHandler for h in root.handlers):
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(name)s %(levelname)s: %(message)s"
+    ))
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+# this guarantees a root-logger until the config file for the class
+# Logger was read. Enables logging in the loader module
 
 class Logger:
     """ 
@@ -23,7 +37,8 @@ class Logger:
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(Logger, cls).__new__(cls, *args, **kwargs)
+            #cls._instance = super(Logger, cls).__new__(cls, *args, **kwargs)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self,
@@ -52,7 +67,13 @@ class Logger:
         """
         cls._config_name = config_name
         cls._config_path = config_path
-        cls._is_configured = False
+
+        # if a singleton instance already exists, reset its state
+        if cls._instance is not None:
+            inst = cls._instance
+            inst._config_name = config_name
+            inst._config_path = config_path
+            inst._is_configured = False
 
     def _configure(self) -> None:
         """
@@ -62,10 +83,35 @@ class Logger:
         if self._is_configured:
             return
         try:
-            config = read_and_parse_config(self._config_name, self._config_path)
+            # generate a loader
+            from util.config.loaders import JSONLoader
+            loader = JSONLoader(self._config_path, self._config_name)
+            # try to read the config file with the json loader
+            config = loader.load()
+
+            #config = read_and_parse_config(self._config_name, self._config_path)          
+
+            # get basic config looger for deletion
+            root = logging.getLogger()
+
+            # delete all global filter
+            root.filters.clear()
+
+            # deactivate all (child) logger
+            for _, lg in logging.Logger.manager.loggerDict.items():
+                if isinstance(lg, logging.Logger):
+                    lg.handlers.clear()
+                    lg.disabled = True
+
+            # remove bootstrap handlers for a clean reconfigure with config file
+            for h in list(root.handlers):
+                root.removeHandler(h)
+            
+            # use the loaded config 
             logging.config.dictConfig(config)
+
         except Exception as e:
-            logging.basicConfig(level=logging.INFO)
+            # Bootstrap handlers stays active
             logging.error(f"Failed to load logging configuration '{self._config_path + self._config_name}': {e}")
         finally:
             self._is_configured = True
