@@ -118,12 +118,17 @@ class ConfigManager:
         self.watch = watch
         self.reload_interval = reload_interval
 
-        # Internal state placeholders
-        self._config: Dict[str, Any] = {}
-        self._mtimes: Dict[str, float] = {}
-        self._stop_event = threading.Event()
-        self._watch_thread: Optional[threading.Thread] = None
-        self._config_loaded: bool = False
+        # Management structures for multiple configs
+        self._states: Dict[str, Dict[str, Any]] = {}
+        self._merge_map: Dict[str, List[str]] = {}
+        self._active = "default"
+
+        # create default config entry
+        self._create_state("default", filenames, schema, watch, reload_interval)
+
+        # Map legacy attributes to active state
+        self._sync_from_state("default")
+
 
         logger.debug(
             "ConfigManager initialized with path=%s, files=%s, watch=%s",
@@ -135,7 +140,133 @@ class ConfigManager:
             self.load()
             self.start_watch()
 
-    def load(self) -> Dict[str, Any]:
+    def _create_state(
+        self,
+        name: str,
+        filenames: Union[str, Path, List[Union[str, Path]]],
+        schema: Optional[Dict[str, Any]],
+        watch: bool,
+        reload_interval: float,
+    ) -> None:
+        """Create internal state entry for a configuration."""
+
+        if isinstance(filenames, (str, Path)):
+            flist = [Path(filenames)]
+        else:
+            flist = [Path(f) for f in filenames]
+
+        self._states[name] = {
+            "filenames": flist,
+            "schema": schema,
+            "watch": watch,
+            "reload_interval": reload_interval,
+            "base_config": {},
+            "config": {},
+            "mtimes": {},
+            "watch_thread": None,
+            "stop_event": threading.Event(),
+            "config_loaded": False,
+        }
+
+    def _sync_from_state(self, name: str) -> None:
+        """Synchronize public attributes from an internal state."""
+        st = self._states[name]
+        self.filenames = [str(p) for p in st["filenames"]]
+        if len(self.filenames) == 1:
+            self.filenames = self.filenames[0]
+        self.schema = st["schema"]
+        self.watch = st["watch"]
+        self.reload_interval = st["reload_interval"]
+        self._config = st["config"]
+        self._mtimes = st["mtimes"]
+        self._watch_thread = st["watch_thread"]
+        self._stop_event = st["stop_event"]
+        self._config_loaded = st["config_loaded"]
+
+    def _sync_to_state(self, name: str) -> None:
+        """Sync the active public attributes back into a state."""
+        st = self._states[name]
+        if isinstance(self.filenames, list):
+            flist = [Path(f) for f in self.filenames]
+        else:
+            flist = [Path(self.filenames)]
+        st["filenames"] = flist
+        st["schema"] = self.schema
+        st["watch"] = self.watch
+        st["reload_interval"] = self.reload_interval
+        st["config"] = self._config
+        st["base_config"] = st.get("base_config", {})
+        st["mtimes"] = self._mtimes
+        st["watch_thread"] = self._watch_thread
+        st["stop_event"] = self._stop_event
+        st["config_loaded"] = self._config_loaded
+
+    # ------------------------------------------------------------------
+    # Public API for multiple configs
+    # ------------------------------------------------------------------
+
+    def add_config(
+        self,
+        name: str,
+        filenames: Union[str, Path, List[Union[str, Path]]],
+        watch: bool = False,
+        schema: Optional[Dict[str, Any]] = None,
+        reload_interval: Optional[float] = None,
+    ) -> None:
+        """Add a new named configuration."""
+        if name in self._states:
+            raise ValueError(f"Config '{name}' already exists")
+        if reload_interval is None:
+            reload_interval = self.reload_interval
+        if schema is None:
+            schema = self.schema
+        self._create_state(name, filenames, schema, watch, reload_interval)
+        if watch:
+            self.load(name)
+            self.start_watch(name)
+
+    def set_active(self, name: str) -> None:
+        """Switch the active configuration."""
+        if name not in self._states:
+            raise KeyError(name)
+        # sync current active state before switching
+        self._sync_to_state(self._active)
+        self._active = name
+        self._sync_from_state(name)
+
+    def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
+        """Merge ``source`` config into ``target`` config."""
+        if target not in self._states or source not in self._states:
+            raise KeyError("unknown config")
+        tgt = self._states[target]
+        src = self._states[source]
+        merged = {**tgt.get("base_config", {}), **src.get("config", {})}
+        tgt["config"] = merged
+        self._merge_map.setdefault(target, [])
+        if source not in self._merge_map[target]:
+            self._merge_map[target].append(source)
+        if target == self._active:
+            self._config = merged
+        return merged
+
+    def _apply_merges_for(self, name: str) -> None:
+        """Re-apply any recorded merges involving the given config."""
+        if name in self._merge_map:
+            self._merge_into(name)
+        for tgt, sources in self._merge_map.items():
+            if name in sources and tgt != name:
+                self._merge_into(tgt)
+
+    def _merge_into(self, target: str) -> None:
+        base = self._states[target].get("base_config", {})
+        merged = dict(base)
+        for src in self._merge_map.get(target, []):
+            merged.update(self._states[src]["config"])
+        self._states[target]["config"] = merged
+        if target == self._active:
+            self._config = merged
+
+    def load(self, name: Optional[str] = None) -> Dict[str, Any]:
         """
         Load and merge JSON config files, validate, apply ENV overrides.
 
@@ -151,12 +282,17 @@ class ConfigManager:
         jsonschema.ValidationError
             If a schema is provided and validation fails.
         """
+        if name is None:
+            name = self._active
+        st = self._states[name]
+
         with self.__class__._lock:
-            logger.info("Loading configuration files: %s", self.filenames)
+            logger.info("Loading configuration files (%s): %s", name, st["filenames"])
             try:
                 from util.config.loaders import JSONLoader
-                names = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
-                names = [Path(n) for n in names]
+                # names = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
+                # names = [Path(n) for n in names]
+                names = st["filenames"]
                 loader = JSONLoader(self.base_path, names)
                 raw = loader.load()
             except Exception as e:
@@ -164,10 +300,11 @@ class ConfigManager:
                 raise
 
             # Normalize filenames to list of strings
-            if isinstance(self.filenames, (str, Path)):
-                filenames = [str(self.filenames)]
-            else:
-                filenames = [str(n) for n in self.filenames]
+            # if isinstance(self.filenames, (str, Path)):
+            #     filenames = [str(self.filenames)]
+            # else:
+            #     filenames = [str(n) for n in self.filenames]
+            filenames = [str(n) for n in names]
 
             # Merge multiple files into one dict
             files = [filenames] if isinstance(filenames, (str, Path)) else filenames
@@ -196,19 +333,25 @@ class ConfigManager:
             merged = self._apply_env_overrides(merged)
 
             # Record file mtimes for hot-reload checks
-            self._mtimes = {}
+            st["mtimes"] = {}
             for fn in files:
                 path = self.base_path / fn
                 try:
-                    self._mtimes[fn] = path.stat().st_mtime
+                    st["mtimes"][fn] = path.stat().st_mtime
                 except OSError:
-                    self._mtimes[fn] = 0.0
+                    st["mtimes"][fn] = 0.0
 
             # Cache and mark as loaded
-            self._config = merged
-            self._config_loaded = True
+            st["base_config"] = merged
+            st["config"] = merged.copy()
+            st["config_loaded"] = True
+            self._apply_merges_for(name)
+
+            if name == self._active:
+                self._sync_from_state(name)
             logger.info("Configuration loaded successfully")
-            return self._config
+
+            return st["config"]
 
 
     def _apply_env_overrides(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -256,7 +399,7 @@ class ConfigManager:
             d = d.setdefault(k, {})
         d[keys[-1]] = val
 
-    def get(self, *keys: str) -> Any:
+    def get(self, *keys: str, name: Optional[str] = None) -> Any:
         """
         Retrieve a config value by a sequence of nested keys.
 
@@ -264,79 +407,102 @@ class ConfigManager:
             cfg.get("database", "host")
         """
         # Lazy load if not yet loaded
-        if not self._config_loaded:
-            self.load()
-        v = self._config
+        if name is None:
+            name = self._active
+        st = self._states[name]
+        if not st["config_loaded"]:
+            self.load(name)
+        v = st["config"]
         for k in keys:
             v = v[k]
         return v
 
-    def reload(self) -> Dict[str, Any]:
+    def reload(self, name: Optional[str] = None) -> Dict[str, Any]:
         """Explicitly reload the configuration from disk."""
-        return self.load()
+        return self.load(name)
     
-    def as_attr(self) -> Any:
+    def as_attr(self, name: Optional[str] = None) -> Any:
         """
         Return the configuration as an object with attribute-style access.
         """
         # Lazy load if not yet loaded
-        if not self._config_loaded:
-            self.load()
-        return _AttrWrapper(self._config)
+        if name is None:
+            name = self._active
+        st = self._states[name]
+        if not st["config_loaded"]:
+            self.load(name)
+        return _AttrWrapper(st["config"])
     
     # ------------------------------------------------------------------
     # Watcher management
     # ------------------------------------------------------------------
 
-    def is_watching(self) -> bool:
+    def is_watching(self, name: Optional[str] = None) -> bool:
         """Return True if the background watch thread is running."""
-        return self._watch_thread is not None and self._watch_thread.is_alive()
+        if name is None:
+            name = self._active
+        st = self._states[name]
+        th = st.get("watch_thread")
+        return th is not None and th.is_alive()
 
-    def start_watch(self) -> None:
+    def start_watch(self, name: Optional[str] = None) -> None:
         """Public method to start the background watch thread."""
-        self._start_watch()
+        self._start_watch(name)
 
-    def _start_watch(self) -> None:
+    def _start_watch(self, name: Optional[str] = None) -> None:
         """
         Start the background thread that watches config files for changes.
         """
-        if self._watch_thread is not None and self._watch_thread.is_alive():
+        if name is None:
+            name = self._active
+        st = self._states[name]
+        if st["watch_thread"] is not None and st["watch_thread"].is_alive():
             return
-        self._stop_event.clear()
-        self._watch_thread = threading.Thread(target=self._watch_loop, daemon=True)
-        self._watch_thread.start()
-        logger.info("Started config watch thread (interval=%.2fs)", self.reload_interval)
+        st["stop_event"].clear()
+        thread = threading.Thread(target=self._watch_loop, args=(name,), daemon=True)
+        st["watch_thread"] = thread
+        if name == self._active:
+            self._watch_thread = thread
+            self._stop_event = st["stop_event"]
+        thread.start()
+        logger.info("Started config watch thread (interval=%.2fs) for %s", st["reload_interval"], name)
 
-    def _watch_loop(self) -> None:
+    def _watch_loop(self, name: str) -> None:
         """
         Loop that polls file mtimes and reloads on change.
         """
-        while not self._stop_event.is_set():
-            time.sleep(self.reload_interval)
-            names = [self.filenames] if isinstance(self.filenames, (str, Path)) else self.filenames
+        st = self._states[name]
+        while not st["stop_event"].is_set():
+            time.sleep(st["reload_interval"])
+            names = st["filenames"]
             for fname in names:
                 path = self.base_path / fname
                 try:
                     mtime = path.stat().st_mtime
                 except Exception:
                     continue
-                if mtime != self._mtimes.get(fname):
-                    logger.info("Detected change in %s, reloading config", fname)
+                if mtime != st["mtimes"].get(str(fname)):
+                    logger.info("Detected change in %s, reloading config %s", fname, name)
                     try:
-                        self.load()
+                        self.load(name)
                     except Exception:
-                        logger.error("Error reloading config after change in %s", fname)
+                        logger.error("Error reloading config %s after change in %s", name, fname)
                     break
 
-    def stop_watch(self) -> None:
-        """
-        Stop the background watch thread.
-        """
-        if self._watch_thread is None:
+    def stop_watch(self, name: Optional[str] = None) -> None:
+        """Stop the background watch thread."""
+        if name is None:
+            name = self._active
+        st = self._states[name]
+        thread = st.get("watch_thread")
+        if thread is None:
             return
-        self._stop_event.set()
-        self._watch_thread.join()
-        logger.info("Stopped config watch thread")
+        st["stop_event"].set()
+        thread.join()
+        st["watch_thread"] = None
+        if name == self._active:
+            self._watch_thread = None
+        logger.info("Stopped config watch thread for %s", name)
 
     # ------------------------------------------------------------------
     # Context manager interface

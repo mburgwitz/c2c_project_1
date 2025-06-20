@@ -358,3 +358,26 @@ def test_get_manager_returns_singleton(tmp_path):
 
     assert m1 is m2
     assert m1.load() == {}
+
+
+def test_merge_and_hot_change(tmp_path):
+    """Merging configs should update on hot change of a source file."""
+    a = {"val": 1}
+    b = {"other": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "a.json", watch=True, reload_interval=0.1)
+    cfg.add_config("b", "b.json", watch=True)
+    cfg.merge_configs("default", "b")
+
+    assert cfg.get("val") == 1
+    assert cfg.get("other") == 2
+
+    time.sleep(0.2)
+    (tmp_path / "b.json").write_text(json.dumps({"other": 99}), encoding="utf-8")
+    time.sleep(0.3)
+
+    assert cfg.get("other") == 99
+    cfg.stop_watch()
+    cfg.stop_watch("b")
