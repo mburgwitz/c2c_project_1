@@ -4,6 +4,8 @@ import logging
 import importlib
 import pytest
 
+from pathlib import Path
+
 # keep reference to module to reload it
 import util.logger as logger_mod
 # now pull the singleton Logger class
@@ -58,6 +60,8 @@ def reload_logger_module():
 
     # drop old module object an re-execute bootstrap code from scratch
     importlib.reload(logger_mod)
+    #overwrite old 'name' of previously imported logger
+    globals()['Logger'] = logger_mod.Logger
     return logging.getLogger()
 
 # -----------------------------------------------------------------------------
@@ -119,7 +123,9 @@ def test_get_logger_string_and_dictconfig(monkeypatch):
     # dictConfig was called exactly once
     assert 'cfg' in called
     # JSONLoader was constructed with DEFAULT_CONFIG_PATH and DEFAULT_CONFIG_NAME
-    assert str(called['path']) == DEFAULT_CONFIG_PATH
+    # convert the string DEFAULT_CONFIG_PATH to Path(DEFAULT_CONFIG_PATH)
+    # because logger uses ConfigManager that converts all path str to Path
+    assert called['path'] == Path(DEFAULT_CONFIG_PATH)
     assert called['name'] == DEFAULT_CONFIG_NAME
     assert isinstance(log, logging.Logger)
     assert log.name == "myapp"
@@ -191,12 +197,7 @@ def test_set_config_file_forces_reload(monkeypatch):
     reload_logger_module()
 
     # First loader
-    class LoaderA:
-        def __init__(self, path, name): pass
-        def load(self):
-            return {"version":1,"disable_existing_loggers":False,
-                    "handlers":{}, "loggers":{}}
-    monkeypatch.setattr('util.config.loaders.JSONLoader', LoaderA, raising=True)
+    monkeypatch.setattr('util.config.manager.ConfigManager', lambda bp, fn: type("X",(),{"load":lambda s:{}})(), raising=True)
     Logger.get_logger("initial")
 
     # Override config file settings
@@ -205,17 +206,16 @@ def test_set_config_file_forces_reload(monkeypatch):
     Logger.set_config_file(new_name, new_path)
 
     got = {}
-    class LoaderB:
-        def __init__(self, path, name):
-            got['path'] = path; got['name'] = name
-        def load(self):
-            return {"version":1,"disable_existing_loggers":False,
-                    "handlers":{}, "loggers":{}}
-    monkeypatch.setattr('util.config.loaders.JSONLoader', LoaderB, raising=True)
+    class LoaderCM:
+            def __init__(self, base_path, filenames):
+                got['base_path'] = base_path
+                got['filenames'] = filenames
+            def load(self): return {"version":1,"disable_existing_loggers":False,"handlers":{},"loggers":{}}
+    monkeypatch.setattr('util.config.manager.ConfigManager', LoaderCM, raising=True)
 
     Logger.get_logger("after")
-    assert str(got['path']) == new_path
-    assert got['name'] == new_name
+    assert Path(got['base_path']) == Path(new_path)
+    assert got['filenames']       == new_name
 
 
 def test_loader_exception_does_not_remove_bootstrap(monkeypatch, caplog):

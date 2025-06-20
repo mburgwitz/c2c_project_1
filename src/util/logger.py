@@ -10,8 +10,7 @@ DEFAULT_CONFIG_PATH = "./config/"
 # Bootstrap-Fallback: easy StreamHandler,
 # for the case that no config was loaded already
 # -------------------------------------------------------------
-root = logging.getLogger()
-#if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+
 root = logging.getLogger()
 if not any(type(h) is logging.StreamHandler for h in root.handlers):
     handler = logging.StreamHandler()
@@ -83,11 +82,15 @@ class Logger:
         if self._is_configured:
             return
         try:
-            # generate a loader
-            from util.config.loaders import JSONLoader
-            loader = JSONLoader(self._config_path, self._config_name)
-            # try to read the config file with the json loader
-            config = loader.load()
+            # use ConfigManager to load the 'logging.json' once
+            # import here and not on module layer to avoid circular imports
+            from util.config.manager import ConfigManager
+
+            cfg = ConfigManager(
+                base_path=self._config_path,
+                filenames=self._config_name
+            )
+            config = cfg.load()
 
             #config = read_and_parse_config(self._config_name, self._config_path)          
 
