@@ -112,11 +112,33 @@ class Logger:
                 from util.config.manager import ConfigManager
 
                 # Ensure a fresh ConfigManager instance for loading logging config
-                ConfigManager._instance = None
-                cfg = ConfigManager(
-                    base_path=self._config_path,
-                    filenames=self._config_name
-                )
+                # ConfigManager._instance = None
+                # cfg = ConfigManager(
+                #     base_path=self._config_path,
+                #     filenames=self._config_name
+                # )
+
+                # ConfigManager.reset_instance()
+                # cfg = ConfigManager.get_manager(
+                #     base_path=self._config_path,
+                #     filenames=self._config_name
+                # )
+                if hasattr(ConfigManager, "reset_instance"):
+                    ConfigManager.reset_instance()
+                else:
+                    ConfigManager._instance = None
+
+                if hasattr(ConfigManager, "get_manager"):
+                    cfg = ConfigManager.get_manager(
+                        base_path=self._config_path,
+                        filenames=self._config_name,
+                    )
+                else:
+                    cfg = ConfigManager(
+                        base_path=self._config_path,
+                        filenames=self._config_name,
+                    )
+
                 config = cfg.load()
 
                 #config = read_and_parse_config(self._config_name, self._config_path)          
@@ -145,7 +167,7 @@ class Logger:
 
             except Exception as e:
                 # Bootstrap handlers stays active
-                failed_path = self._config_path / self._config_name
+                failed_path = Path(self._config_path) / self._config_name
                 logging.error(
                     f"Failed to load logging configuration '{failed_path}': {e}"
                     "Using bootstrap logging."

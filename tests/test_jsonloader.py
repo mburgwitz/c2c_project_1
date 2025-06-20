@@ -238,6 +238,21 @@ def test_single_file_one_item_list(tmp_path):
     result = loader.load(["one.json"])
     assert result == data
 
+@pytest.mark.jsonloader
+def test_duplicate_filenames_skipped(tmp_path):
+    data = {"k": 1}
+    fp = tmp_path / "dup.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    loader = JSONLoader(base_path=tmp_path)
+    # same file referenced in different ways
+    result = loader.load(["dup.json", tmp_path / "dup.json", Path("./dup.json")])
+    assert isinstance(result, dict)
+    assert len(result) == 1
+    assert result == data
+
+
+
 #-------------------------------------------
 # Test JSONloader _normalize function
 #-------------------------------------------

@@ -200,9 +200,17 @@ class JSONLoader:
         
         results: Dict[str,Any] = {}
 
+        seen_paths = set()
         for filename in files:
         
             file_path = self.base_path / filename
+
+            resolved_path = file_path.resolve()
+
+            if resolved_path in seen_paths:
+                logger.warning("Skipping duplicate file: %s", resolved_path)
+                continue
+            seen_paths.add(resolved_path)
 
             logger.debug("Attempting to read %s", file_path)
 

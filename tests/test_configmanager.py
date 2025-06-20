@@ -347,3 +347,14 @@ def test_env_override_new_keys(tmp_path):
 
     assert loaded["section"]["existing"] == "yes"
     assert loaded["section"]["new"] == "added"
+
+
+def test_get_manager_returns_singleton(tmp_path):
+    """get_manager should return the same instance on subsequent calls."""
+    (tmp_path / "a.json").write_text("{}", encoding="utf-8")
+
+    m1 = ConfigManager.get_manager(tmp_path, "a.json")
+    m2 = ConfigManager.get_manager(tmp_path, "a.json")
+
+    assert m1 is m2
+    assert m1.load() == {}

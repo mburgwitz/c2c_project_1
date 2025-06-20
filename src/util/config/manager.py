@@ -43,6 +43,39 @@ class ConfigManager:
     _lock = threading.Lock()
 
     @classmethod
+    def get_manager(
+        cls,
+        base_path: Union[str, Path],
+        filenames: Union[str, Path, List[Union[str, Path]]],
+        schema: Optional[Dict[str, Any]] = None,
+        watch: bool = False,
+        reload_interval: float = 1.0,
+    ) -> "ConfigManager":
+        """Return singleton instance.
+
+        Parameters
+        ----------
+        base_path : Union[str, Path]
+            Directory where the config files reside.
+        filenames : Union[str, Path, List[Union[str, Path]]]
+            Filename or list of filenames to load.
+        schema : Optional[Dict[str, Any]]
+            Optional JSON schema for validation.
+        watch : bool
+            Whether to start the hot reload watcher.
+        reload_interval : float
+            Interval used for the watcher.
+        """
+
+        return cls(
+            base_path,
+            filenames,
+            schema=schema,
+            watch=watch,
+            reload_interval=reload_interval,
+        )
+    
+    @classmethod
     def reset_instance(cls) -> None:
         """Reset the singleton instance and stop any running watcher."""
         with cls._lock:
