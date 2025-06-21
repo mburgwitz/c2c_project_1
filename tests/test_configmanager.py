@@ -442,3 +442,42 @@ def test_reset_instance_stops_watch_thread(tmp_path):
 
     assert ConfigManager._instance is None
     assert not thread.is_alive()
+
+
+def test_get_multiple_keys_as_dict(tmp_path):
+    """get() should return multiple values as a dict when as_dict is True."""
+    data = {"speed": 0, "steering_angle": 90}
+    fp = tmp_path / "vals.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "vals.json")
+    cfg.load()
+
+    result = cfg.get("speed", "steering_angle", as_dict=True)
+    assert result == {"speed": 0, "steering_angle": 90}
+
+
+def test_add_config_alias_and_merge(tmp_path):
+    a = {"x": 1}
+    b = {"y": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "a.json")
+    cfg.add_config("b_cfg", "b.json", alias="b_alias", merge_into="default")
+
+    assert cfg.get("y") == 2
+    cfg.load("b_alias")
+    assert cfg.resolve_alias("b_alias") == "b_cfg"
+
+
+def test_add_config_replace(tmp_path):
+    (tmp_path / "one.json").write_text(json.dumps({"v": 1}), encoding="utf-8")
+    (tmp_path / "two.json").write_text(json.dumps({"v": 2}), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "one.json")
+    cfg.add_config("temp", "one.json")
+    cfg.add_config("temp", "two.json", replace=True)
+
+    cfg.load("temp")
+    assert cfg.get("v", name="temp") == 2

@@ -131,6 +131,7 @@ class ConfigManager:
         # Management structures for multiple configs
         self._states: Dict[str, Dict[str, Any]] = {}
         self._merge_map: Dict[str, List[str]] = {}
+        self._aliases: Dict[str, str] = {}
         self._active = "default"
 
         # create default config entry
@@ -225,22 +226,53 @@ class ConfigManager:
         watch: bool = False,
         schema: Optional[Dict[str, Any]] = None,
         reload_interval: Optional[float] = None,
+        *,
+        alias: Optional[str] = None,
+        merge_into: Optional[str] = None,
+        replace: bool = False,
     ) -> None:
         """Add a new named configuration."""
+        name = self.resolve_alias(name)
         if name in self._states:
-            raise ValueError(f"Config '{name}' already exists")
+            if not replace:
+                raise ValueError(f"Config '{name}' already exists")
+            if self.is_watching(name):
+                self.stop_watch(name)
+            del self._states[name]
+            self._merge_map.pop(name, None)
+            for sources in self._merge_map.values():
+                if name in sources:
+                    sources.remove(name)
+            for a, t in list(self._aliases.items()):
+                if t == name:
+                    del self._aliases[a]
         if reload_interval is None:
             reload_interval = self.reload_interval
         if schema is None:
             schema = self.schema
         self._create_state(name, filenames, schema, watch, reload_interval)
+        if alias:
+            self._aliases[alias] = name
         self.logger.info("Added configuration '%s' with files %s", name, filenames)
-        if watch:
+        if watch or merge_into:
             self.load(name)
-            self.start_watch(name)
+            if watch:
+                self.start_watch(name)
+        if merge_into is not None:
+            target = self.resolve_alias(merge_into)
+            self.merge_configs(target, name)
+
+    def set_alias(self, alias: str, target: str) -> None:
+        """Register ``alias`` as referring to ``target`` configuration."""
+        self._aliases[alias] = target
+
+    def resolve_alias(self, name_or_alias: str) -> str:
+        """Return the real config name for ``name_or_alias``."""
+        return self._aliases.get(name_or_alias, name_or_alias)
 
     def set_active(self, name: str) -> None:
         """Switch the active configuration."""
+        name = self.resolve_alias(name)
         if name not in self._states:
             raise KeyError(name)
         # sync current active state before switching
@@ -251,6 +283,8 @@ class ConfigManager:
 
     def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
         """Merge ``source`` config into ``target`` config."""
+        target = self.resolve_alias(target)
+        source = self.resolve_alias(source)
         if target not in self._states or source not in self._states:
             raise KeyError("unknown config")
         tgt = self._states[target]
@@ -317,6 +351,7 @@ class ConfigManager:
         """
         if name is None:
             name = self._active
+        name = self.resolve_alias(name)
         st = self._states[name]
 
         # allow overriding filenames on this load call
@@ -443,7 +478,14 @@ class ConfigManager:
             d = d.setdefault(k, {})
         d[keys[-1]] = val
 
-    def get(self, *keys: str, name: Optional[str] = None) -> Any:
+    def resolve_alias(self, name: str) -> str:
+        """Return the canonical config name for an alias."""
+        return self._aliases.get(name, name)
+    
+
+    def get(
+        self, *keys: str, name: Optional[str] = None, as_dict: bool = False
+    ) -> Any:
         """
         Retrieve a config value by a sequence of nested keys.
 
@@ -457,10 +499,16 @@ class ConfigManager:
         # Lazy load if not yet loaded
         if name is None:
             name = self._active
+        name = self.resolve_alias(name)
         st = self._states[name]
         if not st["config_loaded"]:
             self.load(name)
-        v = st["config"]
+        cfg = st["config"]
+
+        if as_dict and len(keys) > 1:
+            return {k: cfg[k] for k in keys}
+
+        v = cfg
         for k in keys:
             v = v[k]
         return v
@@ -476,6 +524,7 @@ class ConfigManager:
         # Lazy load if not yet loaded
         if name is None:
             name = self._active
+        name = self.resolve_alias(name)
         st = self._states[name]
         if not st["config_loaded"]:
             self.load(name)
@@ -503,6 +552,7 @@ class ConfigManager:
         """
         if name is None:
             name = self._active
+        name = self.resolve_alias(name)
         st = self._states[name]
         if st["watch_thread"] is not None and st["watch_thread"].is_alive():
             return
@@ -553,6 +603,7 @@ class ConfigManager:
         """Stop the background watch thread."""
         if name is None:
             name = self._active
+        name = self.resolve_alias(name)
         st = self._states[name]
         thread = st.get("watch_thread")
         if thread is None:

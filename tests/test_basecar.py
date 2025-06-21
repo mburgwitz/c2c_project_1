@@ -1,9 +1,11 @@
 import pytest
 
 from basecar import BaseCar
+from util.config.manager import ConfigManager
 
 @pytest.fixture
 def car():
+    ConfigManager.reset_instance()
     return BaseCar()
 
 @pytest.mark.basecar
