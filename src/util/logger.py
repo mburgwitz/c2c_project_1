@@ -51,6 +51,8 @@ class Logger:
         if getattr(self, '_initialized', False):
             return
         
+        logging.debug('initialize Logger')
+
         if config_name is None:
             config_name = self.__class__._config_name
         if config_path is None:
@@ -107,6 +109,9 @@ class Logger:
             if self._is_configured:
                 return
             try:
+
+                logging.debug('configure Logger')
+
                 # use ConfigManager to load the 'logging.json' once
                 # import here and not on module layer to avoid circular imports
                 from util.config.manager import ConfigManager
@@ -127,9 +132,8 @@ class Logger:
                         filenames=self._config_name,
                     )
 
-                config = cfg.load()
-
-                #config = read_and_parse_config(self._config_name, self._config_path)          
+                logging.debug('loading config with ConfigManager')
+                config = cfg.load()   
 
                 # get basic config looger for deletion
                 root = logging.getLogger()
@@ -153,12 +157,13 @@ class Logger:
                 self._is_configured = True
                 self._last_error = None
 
-                 # switch ConfigManager logger to configured logger if available
+                # switch ConfigManager logger to configured logger if available
                 if hasattr(cfg, "use_logger"):
                     try:
+                        logging.debug('reconfigure logger in ConfigManager')
                         cfg.use_logger()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.exception(f'error while reconfigure ConfigManager: {e}')
 
             except Exception as e:
                 # Bootstrap handlers stays active

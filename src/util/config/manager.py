@@ -47,6 +47,8 @@ class ConfigManager:
     ) -> Dict[str, Any]:
         """Load a configuration using the singleton instance."""
 
+        cls.logger.debug(f"load config")
+
         if cls._instance is None:
             cls._instance = cls(
                 base_path,
@@ -247,6 +249,8 @@ class ConfigManager:
         """Switch logger to the project logger after configuration."""
         from util.logger import Logger
         self.logger = Logger.get_logger(__name__)
+        self.logger.info(f"Switched to project logger under {self.logger}")
+
 
     def _create_state(
         self,
