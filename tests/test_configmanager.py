@@ -44,11 +44,11 @@ def test_single_file_load(tmp_path):
     fp = tmp_path / "conf.json"
     fp.write_text(json.dumps(data), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "conf.json")
+    cfg = ConfigManager(tmp_path, "conf.json", "main")
     result = cfg.load()
 
     assert result == data
-    assert cfg.get("a") == 1
+    assert cfg.get("a", name="main") == 1
 
 
 def test_multiple_file_merge(tmp_path):
@@ -60,7 +60,7 @@ def test_multiple_file_merge(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, ["a.json", "b.json"])
+    cfg = ConfigManager(tmp_path, ["a.json", "b.json"], "main")
     merged = cfg.load()
 
     assert merged["x"] == 1
@@ -77,7 +77,7 @@ def test_multiple_file_merge_paths(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, [Path("a.json"), Path("b.json")])
+    cfg = ConfigManager(tmp_path, [Path("a.json"), Path("b.json")], "main")
     merged = cfg.load()
 
     assert merged["x"] == 1
@@ -92,11 +92,35 @@ def test_as_attr_access(tmp_path):
     fp = tmp_path / "cfg.json"
     fp.write_text(json.dumps(data), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "cfg.json")
-    attr = cfg.get(as_attr=True)
+    cfg = ConfigManager(tmp_path, "cfg.json", "main")
+    attr = cfg.get(as_attr=True, name="main")
 
     assert attr.foo == 123
     assert attr.nested["bar"] == 456
+
+def test_get_deep_keys(tmp_path):
+    """Retrieving nested values with multiple keys should work."""
+    data = {"a": {"b": {"c": 123}}}
+    fp = tmp_path / "deep.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "deep.json","main")
+    cfg.load()
+
+    assert cfg.get("a", "b", "c", name="main") == 123
+
+
+def test_as_attr_nested_dot(tmp_path):
+    """Dot notation with as_attr=True should return wrapped nested sections."""
+    data = {"a": {"b": {"c": 5}}}
+    fp = tmp_path / "attr.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "attr.json", "main")
+    cfg.load()
+
+    res = cfg.get("a.b", as_attr=True, name="main")
+    assert res.c == 5
 
 
 def test_env_override(tmp_path):
@@ -112,7 +136,7 @@ def test_env_override(tmp_path):
     os.environ["CONFIG__DB__DEBUG"] = "true"
     os.environ["CONFIG__DB__RATIO"] = "2.5"
 
-    cfg = ConfigManager(tmp_path, "db.json")
+    cfg = ConfigManager(tmp_path, "db.json", "main")
     result = cfg.load()
 
     assert result["db"]["host"] == "localhost"
@@ -134,7 +158,7 @@ def test_schema_validation(tmp_path):
         "properties": {"value": {"type": "string"}},
         "required": ["value"]
     }
-    cfg = ConfigManager(tmp_path, "val.json", schema=schema)
+    cfg = ConfigManager(tmp_path, "val.json", "main", schema=schema)
 
     with pytest.raises(Exception):
         cfg.load()
@@ -144,7 +168,7 @@ def test_schema_validation_missing_jsonschema(tmp_path, monkeypatch):
     """load() should raise RuntimeError if jsonschema is missing."""
     (tmp_path / "val.json").write_text(json.dumps({"v": 1}), encoding="utf-8")
     schema = {"type": "object"}
-    cfg = ConfigManager(tmp_path, "val.json", schema=schema)
+    cfg = ConfigManager(tmp_path, "val.json", "main", schema=schema)
 
     import builtins
     real_import = builtins.__import__
@@ -167,18 +191,18 @@ def test_singleton_behavior(tmp_path):
     fp1 = tmp_path / "one.json"
     fp1.write_text(json.dumps({"k": 1}), encoding="utf-8")
 
-    c1 = ConfigManager(tmp_path, "one.json")
-    assert c1.get("k") == 1
+    c1 = ConfigManager(tmp_path, "one.json", "main")
+    assert c1.get("k", name="main") == 1
 
     fp2 = tmp_path / "two.json"
     fp2.write_text(json.dumps({"k2": 2}), encoding="utf-8")
 
-    c2 = ConfigManager(tmp_path, "two.json")
+    c2 = ConfigManager(tmp_path, "two.json", "main")
     # Same instance
     assert c1 is c2
     # Without reload, new file not loaded
     with pytest.raises(KeyError):
-        c2.get("k2")
+        c2.get("k2", name="main")
 
 
 def test_hot_reload(tmp_path):
@@ -189,15 +213,15 @@ def test_hot_reload(tmp_path):
     fp = tmp_path / "hot.json"
     fp.write_text(json.dumps(data), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "hot.json", watch=True, reload_interval=0.1)
-    assert cfg.get("val") == 1
+    cfg = ConfigManager(tmp_path, "hot.json", "main", watch=True, reload_interval=0.1)
+    assert cfg.get("val", name="main") == 1
 
     # Modify file
     time.sleep(0.2)
     fp.write_text(json.dumps({"val": 99}), encoding="utf-8")
 
     time.sleep(0.3)
-    assert cfg.get("val") == 99
+    assert cfg.get("val", name="main") == 99
 
     # Stop background watch thread
     cfg.stop_watch()
@@ -213,14 +237,14 @@ def test_custom_env_prefix(tmp_path, monkeypatch):
     monkeypatch.setenv("MYCFG__KEY", "new")
     monkeypatch.setenv("CONFIG_ENV_PREFIX", "MYCFG__")
 
-    cfg = ConfigManager(tmp_path, "cfg.json")
+    cfg = ConfigManager(tmp_path, "cfg.json", "main")
     loaded = cfg.load()
     assert loaded["key"] == "new"
 
 def test_apply_env_override_nested_and_types(tmp_path, monkeypatch):
     """_apply_env_overrides handles nested keys and converts values."""
     (tmp_path / "dummy.json").write_text("{}", encoding="utf-8")
-    cfg = ConfigManager(tmp_path, "dummy.json")
+    cfg = ConfigManager(tmp_path, "dummy.json", "main")
 
     base = {"section": {"value": 0}, "flag": False}
 
@@ -239,14 +263,14 @@ def test_missing_base_path_raises(tmp_path):
     """
     bad = tmp_path / "no_dir"
     with pytest.raises(FileNotFoundError):
-        ConfigManager(bad, "a.json")
+        ConfigManager(bad, "a.json", "main")
 
 
 def test_load_missing_file(tmp_path):
     """
     Attempting to load an absent JSON file should raise FileNotFoundError.
     """
-    cfg = ConfigManager(tmp_path, "absent.json")
+    cfg = ConfigManager(tmp_path, "absent.json", "main")
 
     # we have to check for the custom FileNotFound error
     # since it gets raised in JSONloader and gets propagated
@@ -260,7 +284,7 @@ def test_load_invalid_json(tmp_path):
     """
     fp = tmp_path / "bad.json"
     fp.write_text("{ invalid,,, }", encoding="utf-8")
-    cfg = ConfigManager(tmp_path, "bad.json")
+    cfg = ConfigManager(tmp_path, "bad.json", "main")
     with pytest.raises(Exception) as exc:
         cfg.load()
     assert "Invalid format" in str(exc.value) or isinstance(exc.value, ValueError)
@@ -272,8 +296,8 @@ def test_get_lazy_load(tmp_path):
     """
     fp = tmp_path / "one.json"
     fp.write_text(json.dumps({"x": 42}), encoding="utf-8")
-    cfg = ConfigManager(tmp_path, "one.json")
-    assert cfg.get("x") == 42
+    cfg = ConfigManager(tmp_path, "one.json", "main")
+    assert cfg.get("x", name="main") == 42
 
 
 def test_reload_idempotent(tmp_path):
@@ -282,7 +306,7 @@ def test_reload_idempotent(tmp_path):
     """
     fp = tmp_path / "u.json"
     fp.write_text(json.dumps({"a": 1}), encoding="utf-8")
-    cfg = ConfigManager(tmp_path, "u.json")
+    cfg = ConfigManager(tmp_path, "u.json", "main")
     first = cfg.load()
     assert first["a"] == 1
 
@@ -297,7 +321,7 @@ def test_stop_watch_idempotent(tmp_path):
     """
     fp = tmp_path / "h.json"
     fp.write_text(json.dumps({"v": 1}), encoding="utf-8")
-    cfg = ConfigManager(tmp_path, "h.json", watch=True, reload_interval=0.01)
+    cfg = ConfigManager(tmp_path, "h.json", "main", watch=True, reload_interval=0.01)
     cfg.stop_watch()
     # second call should not raise
     cfg.stop_watch()
@@ -306,7 +330,7 @@ def test_stop_watch_idempotent(tmp_path):
 def test_start_watch_no_multiple_threads(tmp_path):
     fp = tmp_path / "w.json"
     fp.write_text("{}", encoding="utf-8")
-    cfg = ConfigManager(tmp_path, "w.json", watch=False, reload_interval=0.01)
+    cfg = ConfigManager(tmp_path, "w.json", "main", watch=False, reload_interval=0.01)
     cfg.load()
 
     cfg.start_watch()
@@ -327,7 +351,7 @@ def test_thread_safe_singleton(tmp_path, monkeypatch):
     results = []
 
     def worker():
-        cfg = ConfigManager(tmp_path, "t.json")
+        cfg = ConfigManager(tmp_path, "t.json", "main")
         cfg.load()
         results.append(cfg)
 
@@ -348,7 +372,7 @@ def test_path_objects_are_supported(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, [Path("a.json"), Path("b.json")])
+    cfg = ConfigManager(tmp_path, [Path("a.json"), Path("b.json")], "main")
     result = cfg.load()
 
     assert result["foo"] == 1
@@ -362,7 +386,7 @@ def test_env_override_new_keys(tmp_path):
 
     os.environ["CONFIG__SECTION__NEW"] = "added"
 
-    cfg = ConfigManager(tmp_path, "c.json")
+    cfg = ConfigManager(tmp_path, "c.json", "main")
     loaded = cfg.load()
 
     assert loaded["section"]["existing"] == "yes"
@@ -373,8 +397,8 @@ def test_get_manager_returns_singleton(tmp_path):
     """get_manager should return the same instance on subsequent calls."""
     (tmp_path / "a.json").write_text("{}", encoding="utf-8")
 
-    m1 = ConfigManager.get_manager(tmp_path, "a.json")
-    m2 = ConfigManager.get_manager(tmp_path, "a.json")
+    m1 = ConfigManager.get_manager(tmp_path, "a.json", "main")
+    m2 = ConfigManager.get_manager(tmp_path, "a.json", "main")
 
     assert m1 is m2
     assert m1.load() == {}
@@ -387,19 +411,19 @@ def test_merge_and_hot_change(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "a.json", watch=True, reload_interval=0.1)
+    cfg = ConfigManager(tmp_path, "a.json", "main", watch=True, reload_interval=0.1)
     cfg.load()
-    cfg.load(alias="b", filenames="b.json", watch=True)
-    cfg.merge_configs("default", "b")
+    cfg.load(name="b", filenames="b.json", watch=True)
+    cfg.merge_configs("main", "b")
 
-    assert cfg.get("val") == 1
-    assert cfg.get("other") == 2
+    assert cfg.get("val", name="main") == 1
+    assert cfg.get("other", name="main") == 2
 
     time.sleep(0.2)
     (tmp_path / "b.json").write_text(json.dumps({"other": 99}), encoding="utf-8")
     time.sleep(0.3)
 
-    assert cfg.get("other") == 99
+    assert cfg.get("other", name="main") == 99
     cfg.stop_watch()
     cfg.stop_watch("b")
 
@@ -412,7 +436,7 @@ def test_load_with_multiple_base_paths(tmp_path):
     dir2.mkdir()
     (dir2 / "c.json").write_text(json.dumps({"val": 42}), encoding="utf-8")
 
-    cfg = ConfigManager([dir1, dir2], "c.json")
+    cfg = ConfigManager( [dir1, dir2], "c.json", "main")
     data = cfg.load()
     assert data["val"] == 42
 
@@ -422,7 +446,7 @@ def test_load_override_filenames(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps({"a": 1}), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps({"b": 2}), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "a.json")
+    cfg = ConfigManager(tmp_path, "a.json", "main")
     cfg.load()
 
     merged = cfg.load(filenames=["a.json", "b.json"])
@@ -434,7 +458,7 @@ def test_reset_instance_stops_watch_thread(tmp_path):
     fp = tmp_path / "w.json"
     fp.write_text("{}", encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "w.json", watch=True, reload_interval=0.01)
+    cfg = ConfigManager(tmp_path, "w.json", "main", watch=True, reload_interval=0.01)
 
     assert cfg.is_watching()
     thread = cfg._watch_thread
@@ -451,10 +475,10 @@ def test_get_multiple_keys_as_dict(tmp_path):
     fp = tmp_path / "vals.json"
     fp.write_text(json.dumps(data), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "vals.json")
+    cfg = ConfigManager(tmp_path, "vals.json", "main")
     cfg.load()
 
-    result = cfg.get("speed", "steering_angle", as_dict=True)
+    result = cfg.get("speed", "steering_angle", as_dict=True, name="main")
     assert result == {"speed": 0, "steering_angle": 90}
 
 
@@ -464,23 +488,22 @@ def test_add_config_alias_and_merge(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "a.json")
+    cfg = ConfigManager(tmp_path, "a.json", "main")
     cfg.load()
-    cfg.load(alias="b_alias", filenames="b.json")
-    cfg.merge_configs("default", "b_alias")
+    cfg.load(name="b_alias", filenames="b.json")
+    cfg.merge_configs("main", "b_alias")
 
-    assert cfg.get("y") == 2
+    assert cfg.get("y", name="main") == 2
     cfg.load(name="b_alias")
-    assert cfg.resolve_alias("b_alias") == "b_alias"
 
 
 def test_add_config_replace(tmp_path):
     (tmp_path / "one.json").write_text(json.dumps({"v": 1}), encoding="utf-8")
     (tmp_path / "two.json").write_text(json.dumps({"v": 2}), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "one.json")
-    cfg.load(alias="temp", filenames="one.json")
-    cfg.load(alias="temp", filenames="two.json", merge_into=False)
+    cfg = ConfigManager(tmp_path, "one.json", "main")
+    cfg.load(name="temp", filenames="one.json")
+    cfg.load(name="temp", filenames="two.json")
 
     assert cfg.get("v", name="temp") == 2
 
@@ -490,10 +513,10 @@ def test_get_multiple_keys_tuple(tmp_path):
     fp = tmp_path / "vals.json"
     fp.write_text(json.dumps(data), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "vals.json")
+    cfg = ConfigManager(tmp_path, "vals.json", "main")
     cfg.load()
 
-    assert cfg.get("a", "b") == (1, 2)
+    assert cfg.get("a", "b", name="main") == (1, 2)
 
 
 def test_module_level_load_and_merge(tmp_path):
@@ -505,11 +528,12 @@ def test_module_level_load_and_merge(tmp_path):
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
     cm.reset()
-    cm.load(tmp_path, "a.json")
-    cm.load(tmp_path, "b.json", alias="b", merge_into=True)
+    cm.load(tmp_path, "a.json", "main")
+    cm.load(tmp_path, "b.json", "b")
+    cm._instance.merge_configs("main", "b")
 
-    assert cm.get("x") == 1
-    assert cm.get("y") == 2
+    assert cm.get("x", name="main") == 1
+    assert cm.get("y", name="main") == 2
 
 
 def test_module_level_load_separate(tmp_path):
@@ -521,10 +545,10 @@ def test_module_level_load_separate(tmp_path):
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
     cm.reset()
-    cm.load(tmp_path, "a.json")
-    cm.load(tmp_path, "b.json", alias="second")
+    cm.load(tmp_path, "a.json", "main")
+    cm.load(tmp_path, "b.json", "second")
 
-    assert cm.get("x") == 1
+    assert cm.get("x", name="main") == 1
     assert cm.get("y", name="second") == 2
 
 def test_remove(tmp_path):
@@ -532,8 +556,8 @@ def test_remove(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps({"y": 2}), encoding="utf-8")
 
-    cfg = ConfigManager(tmp_path, "a.json")
-    cfg.load(alias="second", filenames="b.json")
+    cfg = ConfigManager(tmp_path, "a.json", "main")
+    cfg.load(name="second", filenames="b.json")
     assert cfg.get("y", name="second") == 2
 
     cfg.remove("second")
@@ -548,10 +572,10 @@ def test_classmethod_load_and_get(tmp_path):
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
     ConfigManager.reset()
-    ConfigManager.load(tmp_path, "a.json")
-    ConfigManager.load(tmp_path, "b.json", alias="b")
+    ConfigManager.load(tmp_path, "a.json", "main")
+    ConfigManager.load(tmp_path, "b.json", "b")
 
-    assert ConfigManager.get("x") == 1
+    assert ConfigManager.get("x", name="main") == 1
     assert ConfigManager.get("y", name="b") == 2
 
 
@@ -560,12 +584,9 @@ def test_get_configs(tmp_path):
     (tmp_path / "two.json").write_text(json.dumps({"v": 2}), encoding="utf-8")
 
     ConfigManager.reset()
-    ConfigManager.load(tmp_path, "one.json")
-    ConfigManager.load(tmp_path, "two.json", alias="two")
+    ConfigManager.load(tmp_path, "one.json", "main")
+    ConfigManager.load(tmp_path, "two.json", "two")
 
     names = set(ConfigManager.get_configs())
-    aliases = set(ConfigManager.get_configs(as_alias=True))
-
-    assert names >= {"default", "two"}
-    assert "two" in aliases
+    assert names >= {"main", "two"}
 
