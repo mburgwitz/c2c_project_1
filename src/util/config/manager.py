@@ -5,19 +5,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-class _ClassInstanceMethod:
-    """Descriptor allowing a method to act as both class- and instance method."""
-
-    def __init__(self, func_cls, func_inst):
-        self.func_cls = func_cls
-        self.func_inst = func_inst
-
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self.func_cls.__get__(objtype, objtype)
-        return self.func_inst.__get__(obj, objtype)
-
-
 class ConfigManager:
     """Centralised configuration handler.
 
@@ -47,7 +34,7 @@ class ConfigManager:
     # ------------------------------------------------------------------
 
     @classmethod
-    def _load_cls(
+    def load(
         cls,
         base_path: Union[str, Path, List[Union[str, Path]]],
         filenames: Union[str, Path, List[Union[str, Path]]],
@@ -88,7 +75,7 @@ class ConfigManager:
         )
 
     @classmethod
-    def _get_cls(
+    def get(
         cls,
         *keys: str,
         name: Optional[str] = None,
@@ -102,7 +89,7 @@ class ConfigManager:
         return cls._instance._get(*keys, name=name, as_dict=as_dict, as_attr=as_attr)
 
     @classmethod
-    def _remove_cls(cls, name_or_alias: str) -> None:
+    def remove(cls, name_or_alias: str) -> None:
         """Remove a configuration from the singleton."""
 
         if cls._instance is None:
@@ -112,13 +99,10 @@ class ConfigManager:
     @classmethod
     def reset(cls) -> None:
         """Reset the singleton and stop any watchers."""
-
-        if cls._instance is not None and cls._instance.is_watching():
-            cls._instance.stop_watch()
         cls.reset_instance()
 
     @classmethod
-    def _get_configs_cls(cls, *, as_alias: bool = False) -> List[str]:
+    def get_configs(cls, *, as_alias: bool = False) -> List[str]:
         """Return the list of known configuration names or aliases."""
 
         if cls._instance is None:
@@ -182,12 +166,18 @@ class ConfigManager:
             if cls._instance is None:
                 cls._instance = super(ConfigManager, cls).__new__(cls)
 
-                # initialize attributes 
+                # initialize attributes
                 cls._instance._states = {}
                 cls._instance._merge_map = {}
                 cls._instance._aliases = {}
                 cls._instance._active = "default"
                 cls._instance._initialized = False
+
+                # expose instance level convenience methods
+                cls._instance.load = cls._instance._load
+                cls._instance.get = cls._instance._get
+                cls._instance.remove = cls._instance._remove
+                cls._instance.get_configs = cls._instance._get_configs
         return cls._instance
 
 
@@ -252,6 +242,11 @@ class ConfigManager:
         if self.watch:
             self._load()
             self.start_watch()
+
+    def use_logger(self) -> None:
+        """Switch logger to the project logger after configuration."""
+        from util.logger import Logger
+        self.logger = Logger.get_logger(__name__)
 
     def _create_state(
         self,
@@ -869,11 +864,6 @@ class ConfigManager:
     def __exit__(self, exc_type, exc, tb) -> None:
         if self.is_watching():
             self.stop_watch()
-
-ConfigManager.load = _ClassInstanceMethod(ConfigManager._load_cls, ConfigManager._load)
-ConfigManager.get = _ClassInstanceMethod(ConfigManager._get_cls, ConfigManager._get)
-ConfigManager.remove = _ClassInstanceMethod(ConfigManager._remove_cls, ConfigManager._remove)
-ConfigManager.get_configs = _ClassInstanceMethod(ConfigManager._get_configs_cls, ConfigManager._get_configs)
 
 class _AttrWrapper:
     """Wrapper to access dictionary keys as attributes.

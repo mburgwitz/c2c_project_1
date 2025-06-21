@@ -153,6 +153,13 @@ class Logger:
                 self._is_configured = True
                 self._last_error = None
 
+                 # switch ConfigManager logger to configured logger if available
+                if hasattr(cfg, "use_logger"):
+                    try:
+                        cfg.use_logger()
+                    except Exception:
+                        pass
+
             except Exception as e:
                 # Bootstrap handlers stays active
                 failed_path = Path(self._config_path) / self._config_name

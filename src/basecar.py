@@ -35,7 +35,7 @@ class BaseCar:
 
         self.__steering_angle = ConfigManager.get('steering_angle',name='car')
         self.__speed = ConfigManager.get('speed',name='car')
-        self.__direction = 1 if self.__speed > 0 else {-1 if self.__speed < 0 else 0}  
+        self.__direction = 1 if self.__speed > 0 else (-1 if self.__speed < 0 else 0)
 
         log.debug(f'imported steering_angle: {self.__steering_angle}, speed: {self.__speed} and got direction {self.__direction}')
 

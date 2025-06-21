@@ -568,3 +568,4 @@ def test_get_configs(tmp_path):
 
     assert names >= {"default", "two"}
     assert "two" in aliases
+

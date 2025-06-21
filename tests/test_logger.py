@@ -420,3 +420,36 @@ def test_use_config_restores_on_exception(monkeypatch):
 
     assert Logger._instance._config_name == DEFAULT_CONFIG_NAME
     assert Logger._instance._config_path == DEFAULT_CONFIG_PATH
+
+
+def test_configmanager_use_logger_called(monkeypatch):
+    reload_logger_module()
+
+    called = {"used": False}
+
+    class DummyCM:
+        _instance = None
+
+        def __init__(self, base_path=None, filenames=None, *a, **k):
+            pass
+
+        def load(self):
+            return {"version": 1, "disable_existing_loggers": False, "handlers": {}, "loggers": {}}
+
+        def use_logger(self):
+            called["used"] = True
+
+        @classmethod
+        def get_manager(cls, base_path, filenames, **kw):
+            return cls(base_path, filenames)
+
+        @classmethod
+        def reset_instance(cls):
+            cls._instance = None
+
+    monkeypatch.setattr('util.config.manager.ConfigManager', DummyCM, raising=True)
+    monkeypatch.setattr(logging.config, 'dictConfig', lambda cfg: None)
+
+    Logger.get_logger('foo')
+
+    assert called['used']
