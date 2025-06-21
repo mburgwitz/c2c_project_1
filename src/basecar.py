@@ -30,14 +30,11 @@ class BaseCar:
         log.debug('initialize BaseCar')
         
         log.debug('load config')
-        cfg = ConfigManager.get_manager('./config', 'logging.json')
-        cfg.add_config('car', 'car_initial_values.json')
-        cfg.set_active('car')
-        cfg = cfg.load()  
+        ConfigManager.load('./config', 'car_initial_values.json', alias ='car')
 
 
-        self.__steering_angle = self.__checkSteeringAngle(cfg.get('steering_angle'))
-        self.__speed = self.__checkSpeed(cfg.get('speed'))
+        self.__steering_angle = ConfigManager.get('steering_angle',name='car')
+        self.__speed = ConfigManager.get('speed',name='car')
         self.__direction = 1 if self.__speed > 0 else {-1 if self.__speed < 0 else 0}  
 
         log.debug(f'imported steering_angle: {self.__steering_angle}, speed: {self.__speed} and got direction {self.__direction}')

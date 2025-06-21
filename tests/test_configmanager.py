@@ -497,7 +497,7 @@ def test_get_multiple_keys_tuple(tmp_path):
 
 
 def test_module_level_load_and_merge(tmp_path):
-    from util.config import manager as cm
+    from util.config.manager import ConfigManager as cm
 
     a = {"x": 1}
     b = {"y": 2}
@@ -513,7 +513,7 @@ def test_module_level_load_and_merge(tmp_path):
 
 
 def test_module_level_load_separate(tmp_path):
-    from util.config import manager as cm
+    from util.config.manager import ConfigManager as cm
 
     a = {"x": 1}
     b = {"y": 2}
@@ -540,3 +540,31 @@ def test_remove(tmp_path):
 
     with pytest.raises(KeyError):
         cfg.get("y", name="second")
+
+def test_classmethod_load_and_get(tmp_path):
+    a = {"x": 1}
+    b = {"y": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    ConfigManager.reset()
+    ConfigManager.load(tmp_path, "a.json")
+    ConfigManager.load(tmp_path, "b.json", alias="b")
+
+    assert ConfigManager.get("x") == 1
+    assert ConfigManager.get("y", name="b") == 2
+
+
+def test_get_configs(tmp_path):
+    (tmp_path / "one.json").write_text(json.dumps({"v": 1}), encoding="utf-8")
+    (tmp_path / "two.json").write_text(json.dumps({"v": 2}), encoding="utf-8")
+
+    ConfigManager.reset()
+    ConfigManager.load(tmp_path, "one.json")
+    ConfigManager.load(tmp_path, "two.json", alias="two")
+
+    names = set(ConfigManager.get_configs())
+    aliases = set(ConfigManager.get_configs(as_alias=True))
+
+    assert names >= {"default", "two"}
+    assert "two" in aliases
