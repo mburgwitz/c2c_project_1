@@ -93,7 +93,7 @@ def test_as_attr_access(tmp_path):
     fp.write_text(json.dumps(data), encoding="utf-8")
 
     cfg = ConfigManager(tmp_path, "cfg.json")
-    attr = cfg.as_attr()
+    attr = cfg.get(as_attr=True)
 
     assert attr.foo == 123
     assert attr.nested["bar"] == 456
@@ -309,9 +309,9 @@ def test_start_watch_no_multiple_threads(tmp_path):
     cfg = ConfigManager(tmp_path, "w.json", watch=False, reload_interval=0.01)
     cfg.load()
 
-    cfg._start_watch()
+    cfg.start_watch()
     first = cfg._watch_thread
-    cfg._start_watch()
+    cfg.start_watch()
     second = cfg._watch_thread
     assert first is second
     cfg.stop_watch()
@@ -388,7 +388,8 @@ def test_merge_and_hot_change(tmp_path):
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
     cfg = ConfigManager(tmp_path, "a.json", watch=True, reload_interval=0.1)
-    cfg.add_config("b", "b.json", watch=True)
+    cfg.load()
+    cfg.load(alias="b", filenames="b.json", watch=True)
     cfg.merge_configs("default", "b")
 
     assert cfg.get("val") == 1
@@ -464,11 +465,13 @@ def test_add_config_alias_and_merge(tmp_path):
     (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
 
     cfg = ConfigManager(tmp_path, "a.json")
-    cfg.add_config("b_cfg", "b.json", alias="b_alias", merge_into="default")
+    cfg.load()
+    cfg.load(alias="b_alias", filenames="b.json")
+    cfg.merge_configs("default", "b_alias")
 
     assert cfg.get("y") == 2
     cfg.load(name="b_alias")
-    assert cfg.resolve_alias("b_alias") == "b_cfg"
+    assert cfg.resolve_alias("b_alias") == "b_alias"
 
 
 def test_add_config_replace(tmp_path):
@@ -476,10 +479,9 @@ def test_add_config_replace(tmp_path):
     (tmp_path / "two.json").write_text(json.dumps({"v": 2}), encoding="utf-8")
 
     cfg = ConfigManager(tmp_path, "one.json")
-    cfg.add_config("temp", "one.json")
-    cfg.add_config("temp", "two.json", replace=True)
+    cfg.load(alias="temp", filenames="one.json")
+    cfg.load(alias="temp", filenames="two.json", merge_into=False)
 
-    cfg.load(name="temp")
     assert cfg.get("v", name="temp") == 2
 
 def test_get_multiple_keys_tuple(tmp_path):
@@ -524,3 +526,17 @@ def test_module_level_load_separate(tmp_path):
 
     assert cm.get("x") == 1
     assert cm.get("y", name="second") == 2
+
+def test_remove(tmp_path):
+    a = {"x": 1}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps({"y": 2}), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "a.json")
+    cfg.load(alias="second", filenames="b.json")
+    assert cfg.get("y", name="second") == 2
+
+    cfg.remove("second")
+
+    with pytest.raises(KeyError):
+        cfg.get("y", name="second")

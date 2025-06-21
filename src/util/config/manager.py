@@ -6,34 +6,25 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 class ConfigManager:
-    """
-    Centralized configuration manager that loads and merges JSON config files,
-    validates them (optionally), applies environment variable overrides, and
-    supports hot-reloading.
+    """Centralised configuration handler.
+
+    The manager is implemented as a singleton and keeps track of multiple
+    configurations which can be identified either by their given name or by an
+    optional alias.  Configurations are loaded from JSON files and may be
+    monitored for changes.
 
     Attributes
     ----------
-    base_paths : list[pathlib.Path]
-        One or more directories where config files reside.
-    filenames : Union[str, Path, List[Union[str, Path]]]
-        Filename or ordered list of JSON filenames to load and merge. Strings
-        are converted to `Path` objects when loading.
-    schema : Optional[Dict[str, Any]]
-        JSON Schema used to validate the merged configuration.
-    watch : bool
-        If True, start a background thread to watch for changes and reload.
-    reload_interval : float
-        Polling interval in seconds for detecting file changes.
-    _config : Dict[str, Any]
-        The currently loaded and merged configuration.
-    _mtimes : Dict[str, float]
-        Last modification times of each config file.
-    _watch_thread : threading.Thread
-        Background thread for hot-reload.
-    _stop_event : threading.Event
-        Event to signal the watch thread to stop.
-    _config_loaded : bool
-        Indicates whether the configuration has been loaded at least once.
+    base_path : Union[str, Path, list[Union[str, Path]]]
+        Directory or list of directories where configuration files reside.
+    filenames : Union[str, Path, list[Union[str, Path]]]
+        File name or list of files to load.
+    schema : dict, optional
+        JSON schema used for validation.
+    watch : bool, default ``False``
+        Start a background thread which reloads changed files automatically.
+    reload_interval : float, default ``1.0``
+        Polling interval for the watch thread in seconds.
     """
     _instance: Optional['ConfigManager'] = None
     _lock = threading.Lock()
@@ -76,8 +67,12 @@ class ConfigManager:
     def reset_instance(cls) -> None:
         """Reset the singleton instance and stop any running watcher."""
         with cls._lock:
-            if cls._instance is not None and cls._instance.is_watching():
-                cls._instance.stop_watch()
+            if cls._instance is not None:
+                try:
+                    if cls._instance.is_watching():
+                        cls._instance.stop_watch()
+                except KeyError:
+                    pass
             cls._instance = None
 
     def __new__(cls,
@@ -244,23 +239,38 @@ class ConfigManager:
 
         This method is considered internal. External callers should prefer
         :meth:`load` when merely loading additional configuration files.
+
+        Parameters
+        ----------
+        name : str
+            Configuration name or alias to create. Existing entries can be
+            replaced by setting ``replace`` to ``True``.
+        filenames : str or Path or list
+            JSON files comprising the configuration.
+        watch : bool, optional
+            Enable automatic reloading when files change.
+        schema : dict, optional
+            JSON schema used for validation.
+        reload_interval : float, optional
+            Polling interval for the watch thread.
+        alias : str, optional
+            Alias referring to ``name``.
+        merge_into : str, optional
+            Merge the created config into another one.
+        replace : bool, optional
+            Replace an existing configuration with the same name.
+
         """
         name = self.resolve_alias(name)
         if name in self._states:
             if not replace:
                 raise ValueError(f"Config '{name}' already exists")
-            if self.is_watching(name):
-                self.stop_watch(name)
-            del self._states[name]
-            self._merge_map.pop(name, None)
-            for sources in self._merge_map.values():
-                if name in sources:
-                    sources.remove(name)
-            for a, t in list(self._aliases.items()):
-                if t == name:
-                    del self._aliases[a]
+            
+            self.remove(name)
+
         if reload_interval is None:
             reload_interval = self.reload_interval
+
         if schema is None:
             schema = self.schema
         self._create_state(name, filenames, schema, watch, reload_interval)
@@ -284,7 +294,8 @@ class ConfigManager:
         return self._aliases.get(name_or_alias, name_or_alias)
 
     def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
-        """Merge ``source`` config into ``target`` config."""
+        """Merge ``source`` configuration into ``target`` configuration."""
+        
         target = self.resolve_alias(target)
         source = self.resolve_alias(source)
         if target not in self._states or source not in self._states:
@@ -300,6 +311,34 @@ class ConfigManager:
             self._config = merged
         self.logger.info("Merged config '%s' into '%s'", source, target)
         return merged
+
+    def remove(self, name_or_alias: str) -> None:
+        """Remove a configuration from the manager.
+
+        Parameters
+        ----------
+        name_or_alias : str
+            Name or alias of the configuration to remove.
+        """
+        name = self._resolve_alias(name_or_alias)
+        if name not in self._states:
+            raise KeyError(f"unknown config: {name_or_alias}")
+        if self.is_watching(name):
+            self.stop_watch(name)
+
+        del self._states[name]
+        self._merge_map.pop(name, None)
+        for sources in self._merge_map.values():
+            if name in sources:
+                sources.remove(name)
+
+        for alias, target in list(self._aliases.items()):
+            if alias == name_or_alias or target == name:
+                del self._aliases[alias]
+
+        if self._active == name:
+            self._active = "default"
+            self._sync_from_state(self._active)
 
     def _apply_merges_for(self, name: str) -> None:
         """Re-apply any recorded merges involving the given config."""
@@ -338,6 +377,7 @@ class ConfigManager:
         merge_into: Optional[bool] = None,
         name: Optional[str] = None,
         filenames: Optional[Union[str, Path, List[Union[str, Path]]]] = None,
+        watch: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Load configuration files and optionally manage alias mappings.
@@ -360,6 +400,8 @@ class ConfigManager:
             merging, this name is used for the temporary source configuration.
         filenames : str, Path or list, optional
             Override the filenames used for loading.
+        watch : bool, optional
+            Whether the configuration should be watched for changes.
 
         Returns
         -------
@@ -377,6 +419,7 @@ class ConfigManager:
             if alias in self._aliases or alias in self._states:
                 target = self.resolve_alias(alias)
                 self.logger.info("Alias '%s' found for config '%s'", alias, target)
+
                 if merge_into is True:
                     src_name = name or f"{target}_merge"
                     self.logger.info(
@@ -385,15 +428,26 @@ class ConfigManager:
                         alias,
                         src_name,
                     )
-                    self.add_config(src_name, filenames or self.filenames, replace=True)
+                    self._add_config(
+                        cfg_name,
+                        filenames or self.filenames,
+                        alias=alias,
+                        watch=watch if watch is not None else False,
+                    )
                     self.load(name=src_name)
                     self.merge_configs(target, src_name)
                     return self._states[target]["config"]
+                
                 elif merge_into is False:
                     self.logger.info(
                         "Replacing config '%s' for alias '%s'", target, alias
                     )
-                    self.add_config(target, filenames or self.filenames, replace=True)
+                    self._add_config(
+                        cfg_name,
+                        filenames or self.filenames,
+                        alias=alias,
+                        watch=watch if watch is not None else False,
+                    )
                     return self.load(name=target)
                 else:
                     self.logger.debug(
@@ -403,7 +457,12 @@ class ConfigManager:
             else:
                 cfg_name = name or alias
                 self.logger.info("Creating new config '%s' for alias '%s'", cfg_name, alias)
-                self.add_config(cfg_name, filenames or self.filenames, alias=alias)
+                self._add_config(
+                        src_name,
+                        filenames or self.filenames,
+                        replace=True,
+                        watch=watch if watch is not None else False,
+                    )
                 return self.load(name=cfg_name)
             
         if name is None:
@@ -541,7 +600,11 @@ class ConfigManager:
     
 
     def get(
-        self, *keys: str, name: Optional[str] = None, as_dict: bool = False
+        self,
+        *keys: str,
+        name: Optional[str] = None,
+        as_dict: bool = False,
+        as_attr: bool = False,
     ) -> Any:
         """
         Retrieve a config value by a sequence of nested keys.
@@ -551,7 +614,8 @@ class ConfigManager:
             angle = cfg.get('steering_angle')
 
         A ``KeyError`` is raised if any key is missing in the loaded
-        configuration.
+        configuration. When ``as_attr`` is ``True`` the complete configuration is
+        returned wrapped in an object that allows attribute style access.
         """
         # Lazy load if not yet loaded
         if name is None:
@@ -561,6 +625,12 @@ class ConfigManager:
         if not st["config_loaded"]:
             self.load(name=name)
         cfg = st["config"]
+
+        if as_attr and keys:
+            raise ValueError("as_attr=True cannot be used together with keys")
+
+        if not keys:
+            return _AttrWrapper(cfg) if as_attr else cfg
 
         if len(keys) > 1:
             if as_dict:
@@ -576,19 +646,7 @@ class ConfigManager:
         """Explicitly reload the configuration from disk."""
         return self.load(name=name)
     
-    def as_attr(self, name: Optional[str] = None) -> Any:
-        """
-        Return the configuration as an object with attribute-style access.
-        """
-        # Lazy load if not yet loaded
-        if name is None:
-            name = self._active
-        name = self.resolve_alias(name)
-        st = self._states[name]
-        if not st["config_loaded"]:
-            self.load(name=name)
-        return _AttrWrapper(st["config"])
-    
+
     # ------------------------------------------------------------------
     # Watcher management
     # ------------------------------------------------------------------
@@ -732,7 +790,7 @@ def load(
         name = "default"
     else:
         name = alias or "extra"
-        _default_manager.add_config(
+        _default_manager._add_config(
             name,
             filenames,
             watch=watch,
@@ -742,19 +800,47 @@ def load(
             merge_into="default" if merge_into else None,
             replace=True,
         )
-    return _default_manager.load("default" if merge_into else name)
+    return _default_manager.load(
+        name="default" if merge_into else name,
+        watch=watch,
+    )
 
 
-def get(*keys: str, name: Optional[str] = None, as_dict: bool = False) -> Any:
+def remove(name_or_alias: str) -> None:
+    """Remove a configuration from the default manager."""
     if _default_manager is None:
         raise RuntimeError("No configuration loaded")
-    return _default_manager.get(*keys, name=name, as_dict=as_dict)
+    _default_manager.remove(name_or_alias)
 
 
-def as_attr(name: Optional[str] = None) -> Any:
+def get(
+        *keys: str,
+        name: Optional[str] = None,
+        as_dict: bool = False,
+        as_attr: bool = False,
+    ) -> Any:
+    """Return configuration values from the default manager.
+
+    Parameters
+    ----------
+    *keys : str
+        Sequence of keys to look up. If omitted and ``as_attr`` is ``True`` the
+        complete configuration is returned as an attribute object.
+    name : str, optional
+        Name or alias of the configuration to access.
+    as_dict : bool, default ``False``
+        Return multiple keys as dictionary instead of tuple.
+    as_attr : bool, default ``False``
+        When ``True`` return an attribute wrapper object of the configuration.
+
+    Returns
+    -------
+    Any
+        The requested configuration value(s).
+    """
     if _default_manager is None:
         raise RuntimeError("No configuration loaded")
-    return _default_manager.as_attr(name)
+    return _default_manager.get(*keys, name=name, as_dict=as_dict, as_attr=as_attr)
 
 
 def reset() -> None:
