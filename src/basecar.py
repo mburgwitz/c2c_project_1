@@ -1,6 +1,7 @@
 from basisklassen import FrontWheels, BackWheels
 from util.logger import Logger
 from util.config.manager import ConfigManager
+import time
 
 class BaseCar:
     """ Provides basic driving functionality.
@@ -25,24 +26,32 @@ class BaseCar:
     MIN_SPEED = -100
 
     # Standardkonstruktor der Klasse
-    def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
-        log = Logger.get_logger("BaseCar") 
-        log.debug('initialize BaseCar')
+    def __init__(self, cfg_name: str = 'car_initial_values.json'):
+
+        # set up logging
+        self.log = Logger.get_logger("BaseCar") 
+        self.log.debug('initialize BaseCar')
         
-        log.debug('load config')
-        ConfigManager.load('./config', 'car_initial_values.json', alias ='car')
+        # load config
+        self.log.debug('load config')
+        ConfigManager.load('./config', cfg_name, alias ='car')
 
-
+        # set initial values based on config
         self.__steering_angle = ConfigManager.get('steering_angle',name='car')
         self.__speed = ConfigManager.get('speed',name='car')
         self.__direction = 1 if self.__speed > 0 else (-1 if self.__speed < 0 else 0)
 
-        log.debug(f'imported steering_angle: {self.__steering_angle}, speed: {self.__speed} and got direction {self.__direction}')
+        self.log.debug(f'imported steering_angle: {self.__steering_angle}, speed: {self.__speed} and got direction {self.__direction}')
 
         self.__fw = FrontWheels()
         self.__bw = BackWheels()             
 
-        log.info("init finished")
+        ConfigManager.load(base_path = 'config',
+                           filenames= 'fahrplan.json',
+                           alias = 'fahrplan'
+                           )
+
+        self.log.info("init finished")
 
     #------------------------------------
     # properties
@@ -188,6 +197,8 @@ class BaseCar:
         - speed == 0 → stop (direction = 0)
         """
 
+        self.log.debug(f"start drive")
+
         # Prüfen, ob Winkel neu gesetzt wurde
         if angle is not None:
             self.steering_angle = angle
@@ -205,6 +216,8 @@ class BaseCar:
             self.__direction = -1
         else:
             self.stop()
+
+        self.log.debug(f"speed: {self.speed}, angle: {self.steering_angle}, direction: {self.direction}")
 
         # Ansteuern der Lenkung / setzen des Lenkwinkels
         self.__fw.turn(self.steering_angle)
@@ -228,41 +241,69 @@ class BaseCar:
         # Setzen der Fahrtichtung auf 0 (stationary)
         self.__direction = 0
 
+        self.log.debug("car stopped")
 
-if __name__ == '__main__':
+    def driveSchedule(self, schedule: str):
+        """driveSchedule _summary_
 
-    
+        _extended_summary_
+
+        Parameters
+        ----------
+        schedule : str
+            _description_
+        """
+        self.log.debug(f"loading schedule {schedule}")
+        mode = ConfigManager.get(schedule, name = 'fahrplan')
+        self.log.debug(f"schedule {schedule} loaded: {mode}")
+
+        # iterate through every line in the schedule
+        # Format: [mode, int | null, int | null, int | float]
+        #   JSON null is automatically converted to None
+        #   modes: 
+        #       'd' for 'drive. ['d', speed, angle, time]
+        #       's' for 'stop.  ['s', time]
+
+        try:
+            for cmd in mode['schedule']:
+                md = str.lower(cmd[0])
+                
+                t = cmd[-1]
+                # type check and value check
+                if not isinstance(t,(int, float)) and t > 0.0:
+                    raise ValueError(f'Wrong type or value for time: \
+                                        {t} type({type(t)}). \
+                                        Expected value > 0 and type "int" or "float".') 
+
+                if md == 'd':                   
+                    speed = cmd[1]; angle = cmd[2]
+                    
+                    # type check
+                    if  all(isinstance(x, int) or x is None for x in (speed, angle)):
+                        self.log.debug(f"driving with speed {speed} and angle {angle} for {t} seconds")
+                        self.drive(speed, angle)
+                        time.sleep(t)
+                        
+                    else:
+                        raise ValueError(f'Wrong type for speed and/or angle: \
+                                        speed type({type(speed)}), angle type({type(angle)}). \
+                                        Expected "int" or "None".')    
+                elif md == 's':
+                        self.log.debug(f"stopping for {t} seconds")
+                        self.stop()
+                        time.sleep(t)
+                else:
+                    raise ValueError(f'Wrong value for mode. Got {md}, expected "d" or "s".')
+                
+            
+        except Exception as e:
+            self.log.error(f"{ e }")
+
+        finally:
+            self.stop()
+
+
+if __name__ == '__main__': 
 
     car = BaseCar()
-
-    # import time
-
-    # # Fahrmodus 1
-    # car.drive(speed = 30)
-    # time.sleep(3)
-    
-    # car.stop()
-    # time.sleep(1)
-
-    # car.drive(speed = 30)
-    # time.sleep(3)
-
-    # car.stop()
-
-
-    # time.sleep(3)
-    # # Fahrmodus 2
-    # car.drive(speed = 30, angle= 90)
-    # time.sleep(1)
-    
-    # car.drive(angle = 135)
-    # time.sleep(8)
-
-    # car.drive(speed=-30)
-    # time.sleep(8)
-
-    # car.drive(angle= 90)
-    # time.sleep(1)
-
-    # car.stop()
-    
+    car.driveSchedule("fahrmodus_1")

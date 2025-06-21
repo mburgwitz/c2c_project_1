@@ -1,0 +1,24 @@
+{
+    "fahrmodus_1": {
+        "schedule": [
+            ["d", null, null, 3],
+            ["s", 1],
+            ["d", -30, null, 3]
+        ]
+    },
+    "fahrmodus_2" : {
+        "schedule": [
+            ["d", null, null, 3],
+            ["s", 1],
+            ["d", -30, null, 3]
+        ]
+    },
+    "fahrmodus_3" : {
+        "schedule": [
+            ["d", null, null, 1],
+            ["d", null, 135, 8],
+            ["d", -30,  null, 8],
+            ["d", null, 90, 1]            
+        ]
+    }
+}
