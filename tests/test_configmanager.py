@@ -467,7 +467,7 @@ def test_add_config_alias_and_merge(tmp_path):
     cfg.add_config("b_cfg", "b.json", alias="b_alias", merge_into="default")
 
     assert cfg.get("y") == 2
-    cfg.load("b_alias")
+    cfg.load(name="b_alias")
     assert cfg.resolve_alias("b_alias") == "b_cfg"
 
 
@@ -479,5 +479,48 @@ def test_add_config_replace(tmp_path):
     cfg.add_config("temp", "one.json")
     cfg.add_config("temp", "two.json", replace=True)
 
-    cfg.load("temp")
+    cfg.load(name="temp")
     assert cfg.get("v", name="temp") == 2
+
+def test_get_multiple_keys_tuple(tmp_path):
+    """get() should return multiple values as a tuple when as_dict is False."""
+    data = {"a": 1, "b": 2}
+    fp = tmp_path / "vals.json"
+    fp.write_text(json.dumps(data), encoding="utf-8")
+
+    cfg = ConfigManager(tmp_path, "vals.json")
+    cfg.load()
+
+    assert cfg.get("a", "b") == (1, 2)
+
+
+def test_module_level_load_and_merge(tmp_path):
+    from util.config import manager as cm
+
+    a = {"x": 1}
+    b = {"y": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    cm.reset()
+    cm.load(tmp_path, "a.json")
+    cm.load(tmp_path, "b.json", alias="b", merge_into=True)
+
+    assert cm.get("x") == 1
+    assert cm.get("y") == 2
+
+
+def test_module_level_load_separate(tmp_path):
+    from util.config import manager as cm
+
+    a = {"x": 1}
+    b = {"y": 2}
+    (tmp_path / "a.json").write_text(json.dumps(a), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps(b), encoding="utf-8")
+
+    cm.reset()
+    cm.load(tmp_path, "a.json")
+    cm.load(tmp_path, "b.json", alias="second")
+
+    assert cm.get("x") == 1
+    assert cm.get("y", name="second") == 2

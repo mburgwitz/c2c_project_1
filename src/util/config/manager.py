@@ -88,7 +88,15 @@ class ConfigManager:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(ConfigManager, cls).__new__(cls)
+
+                # initialize attributes 
+                cls._instance._states = {}
+                cls._instance._merge_map = {}
+                cls._instance._aliases = {}
+                cls._instance._active = "default"
+                cls._instance._initialized = False
         return cls._instance
+
 
     def __init__(
         self,
@@ -101,7 +109,14 @@ class ConfigManager:
         # Prevent reinitialization on subsequent calls
         if getattr(self, '_initialized', False):
             return
+
         self._initialized = True
+
+        # prepare core structures
+        self._states: Dict[str, Dict[str, Any]] = {}
+        self._merge_map: Dict[str, List[str]] = {}
+        self._aliases: Dict[str, str] = {}
+        self._active = "default"
 
         from util.logger import Logger
         self.logger = Logger.get_logger(__name__)
@@ -127,12 +142,6 @@ class ConfigManager:
         self.schema = schema
         self.watch = watch
         self.reload_interval = reload_interval
-
-        # Management structures for multiple configs
-        self._states: Dict[str, Dict[str, Any]] = {}
-        self._merge_map: Dict[str, List[str]] = {}
-        self._aliases: Dict[str, str] = {}
-        self._active = "default"
 
         # create default config entry
         self._create_state("default", filenames, schema, watch, reload_interval)
@@ -219,7 +228,7 @@ class ConfigManager:
     # Public API for multiple configs
     # ------------------------------------------------------------------
 
-    def add_config(
+    def _add_config(
         self,
         name: str,
         filenames: Union[str, Path, List[Union[str, Path]]],
@@ -231,7 +240,11 @@ class ConfigManager:
         merge_into: Optional[str] = None,
         replace: bool = False,
     ) -> None:
-        """Add a new named configuration."""
+        """Add a new named configuration.
+
+        This method is considered internal. External callers should prefer
+        :meth:`load` when merely loading additional configuration files.
+        """
         name = self.resolve_alias(name)
         if name in self._states:
             if not replace:
@@ -255,7 +268,7 @@ class ConfigManager:
             self._aliases[alias] = name
         self.logger.info("Added configuration '%s' with files %s", name, filenames)
         if watch or merge_into:
-            self.load(name)
+            self.load(name=name)
             if watch:
                 self.start_watch(name)
         if merge_into is not None:
@@ -269,17 +282,6 @@ class ConfigManager:
     def resolve_alias(self, name_or_alias: str) -> str:
         """Return the real config name for ``name_or_alias``."""
         return self._aliases.get(name_or_alias, name_or_alias)
-
-    def set_active(self, name: str) -> None:
-        """Switch the active configuration."""
-        name = self.resolve_alias(name)
-        if name not in self._states:
-            raise KeyError(name)
-        # sync current active state before switching
-        self._sync_to_state(self._active)
-        self._active = name
-        self._sync_from_state(name)
-        self.logger.info("Active configuration switched to '%s'", name)
 
     def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
         """Merge ``source`` config into ``target`` config."""
@@ -331,16 +333,38 @@ class ConfigManager:
 
     def load(
         self,
+        *,
+        alias: Optional[str] = None,
+        merge_into: Optional[bool] = None,
         name: Optional[str] = None,
         filenames: Optional[Union[str, Path, List[Union[str, Path]]]] = None,
     ) -> Dict[str, Any]:
         """
-        Load and merge JSON config files, validate, apply ENV overrides.
+        Load configuration files and optionally manage alias mappings.
+
+        The configuration to operate on can be selected via ``name`` which may
+        also be an alias registered with :meth:`set_alias`.
+
+        Parameters
+        ----------
+        alias : str, optional
+            Alias name to load or create. If the alias already exists the
+            behaviour depends on ``merge_into``.
+        merge_into : bool, optional
+            If ``True`` merge the newly loaded files into the existing config
+            referenced by ``alias``. If ``False`` rebuild that configuration
+            from scratch. When ``None`` the configuration referenced by
+            ``alias`` is simply loaded.
+        name : str, optional
+            Configuration name to operate on when ``alias`` is not used. When
+            merging, this name is used for the temporary source configuration.
+        filenames : str, Path or list, optional
+            Override the filenames used for loading.
 
         Returns
         -------
         Dict[str, Any]
-            The merged configuration.
+            The resulting configuration dictionary.
 
         Raises
         ------
@@ -349,6 +373,39 @@ class ConfigManager:
         jsonschema.ValidationError
             If a schema is provided and validation fails.
         """
+        if alias is not None:
+            if alias in self._aliases or alias in self._states:
+                target = self.resolve_alias(alias)
+                self.logger.info("Alias '%s' found for config '%s'", alias, target)
+                if merge_into is True:
+                    src_name = name or f"{target}_merge"
+                    self.logger.info(
+                        "Merging files %s into alias '%s' using config '%s'",
+                        filenames,
+                        alias,
+                        src_name,
+                    )
+                    self.add_config(src_name, filenames or self.filenames, replace=True)
+                    self.load(name=src_name)
+                    self.merge_configs(target, src_name)
+                    return self._states[target]["config"]
+                elif merge_into is False:
+                    self.logger.info(
+                        "Replacing config '%s' for alias '%s'", target, alias
+                    )
+                    self.add_config(target, filenames or self.filenames, replace=True)
+                    return self.load(name=target)
+                else:
+                    self.logger.debug(
+                        "Loading existing config for alias '%s'", alias
+                    )
+                    return self.load(name=alias, filenames=filenames)
+            else:
+                cfg_name = name or alias
+                self.logger.info("Creating new config '%s' for alias '%s'", cfg_name, alias)
+                self.add_config(cfg_name, filenames or self.filenames, alias=alias)
+                return self.load(name=cfg_name)
+            
         if name is None:
             name = self._active
         name = self.resolve_alias(name)
@@ -502,11 +559,13 @@ class ConfigManager:
         name = self.resolve_alias(name)
         st = self._states[name]
         if not st["config_loaded"]:
-            self.load(name)
+            self.load(name=name)
         cfg = st["config"]
 
-        if as_dict and len(keys) > 1:
-            return {k: cfg[k] for k in keys}
+        if len(keys) > 1:
+            if as_dict:
+                return {k: cfg[k] for k in keys}
+            return tuple(cfg[k] for k in keys)
 
         v = cfg
         for k in keys:
@@ -515,7 +574,7 @@ class ConfigManager:
 
     def reload(self, name: Optional[str] = None) -> Dict[str, Any]:
         """Explicitly reload the configuration from disk."""
-        return self.load(name)
+        return self.load(name=name)
     
     def as_attr(self, name: Optional[str] = None) -> Any:
         """
@@ -527,7 +586,7 @@ class ConfigManager:
         name = self.resolve_alias(name)
         st = self._states[name]
         if not st["config_loaded"]:
-            self.load(name)
+            self.load(name=name)
         return _AttrWrapper(st["config"])
     
     # ------------------------------------------------------------------
@@ -594,7 +653,7 @@ class ConfigManager:
                 if mtime != st["mtimes"].get(str(fname)):
                     self.logger.info("Detected change in %s, reloading config %s", fname, name)
                     try:
-                        self.load(name)
+                        self.load(name=name)
                     except Exception:
                         self.logger.error("Error reloading config %s after change in %s", name, fname)
                     break
@@ -643,3 +702,65 @@ class _AttrWrapper:
 
     def __getitem__(self, item: str) -> Any:
         return self.__dict__[item]
+
+# ------------------------------------------------------------------
+# Module level convenience API
+# ------------------------------------------------------------------
+_default_manager: Optional[ConfigManager] = None
+
+
+def load(
+    base_path: Union[str, Path, List[Union[str, Path]]],
+    filenames: Union[str, Path, List[Union[str, Path]]],
+    *,
+    alias: Optional[str] = None,
+    merge_into: bool = False,
+    watch: bool = False,
+    schema: Optional[Dict[str, Any]] = None,
+    reload_interval: float = 1.0,
+) -> Dict[str, Any]:
+    """Load configuration using a module level singleton."""
+    global _default_manager
+    if _default_manager is None:
+        _default_manager = ConfigManager(
+            base_path,
+            filenames,
+            schema=schema,
+            watch=watch,
+            reload_interval=reload_interval,
+        )
+        name = "default"
+    else:
+        name = alias or "extra"
+        _default_manager.add_config(
+            name,
+            filenames,
+            watch=watch,
+            schema=schema,
+            reload_interval=reload_interval,
+            alias=alias,
+            merge_into="default" if merge_into else None,
+            replace=True,
+        )
+    return _default_manager.load("default" if merge_into else name)
+
+
+def get(*keys: str, name: Optional[str] = None, as_dict: bool = False) -> Any:
+    if _default_manager is None:
+        raise RuntimeError("No configuration loaded")
+    return _default_manager.get(*keys, name=name, as_dict=as_dict)
+
+
+def as_attr(name: Optional[str] = None) -> Any:
+    if _default_manager is None:
+        raise RuntimeError("No configuration loaded")
+    return _default_manager.as_attr(name)
+
+
+def reset() -> None:
+    global _default_manager
+    if _default_manager is not None:
+        if _default_manager.is_watching():
+            _default_manager.stop_watch()
+    ConfigManager.reset_instance()
+    _default_manager = None
