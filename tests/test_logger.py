@@ -109,7 +109,7 @@ def test_get_logger_string_and_dictconfig(monkeypatch):
 
     # Patch JSONLoader in util.config.loaders
     class DummyLoader:
-        def __init__(self, *, base_path, filenames):
+        def __init__(self, *, base_path, filenames,name=None):
             called['path'] = base_path
             called['name'] = filenames
         def load(self):
@@ -203,7 +203,7 @@ def test_set_config_file_forces_reload(monkeypatch):
     reload_logger_module()
 
     # First loader
-    monkeypatch.setattr('util.config.manager.ConfigManager', lambda bp, fn: type("X",(),{"load":lambda s:{}})(), raising=True)
+    monkeypatch.setattr('util.config.manager.ConfigManager', lambda *a, **k: type("X",(),{"load":lambda s:{}})(), raising=True)
     Logger.get_logger("initial")
 
     # Override config file settings
@@ -213,9 +213,9 @@ def test_set_config_file_forces_reload(monkeypatch):
 
     got = {}
     class LoaderCM:
-            def __init__(self, base_path, filenames):
-                got['base_path'] = base_path
-                got['filenames'] = filenames
+            def __init__(self, base_path, filenames, name=None):
+                got["base_path"] = base_path
+                got["filenames"] = filenames
             def load(self): return {"version":1,"disable_existing_loggers":False,"handlers":{},"loggers":{}}
     monkeypatch.setattr('util.config.manager.ConfigManager', LoaderCM, raising=True)
 
@@ -259,7 +259,7 @@ def test_set_config_file_thread_safe(monkeypatch):
     reload_logger_module()
 
     class DummyCM:
-        def __init__(self, base_path, filenames):
+        def __init__(self, base_path, filenames,name=None):
             self.base_path = base_path
             self.filenames = filenames
         def load(self):
@@ -381,7 +381,7 @@ def test_use_config_context_manager(monkeypatch):
     reload_logger_module()
 
     class DummyLoader:
-        def __init__(self, base_path, filenames):
+        def __init__(self, base_path, filenames,name=None):
             self.base_path = base_path
             self.filenames = filenames
         def load(self):
@@ -402,7 +402,7 @@ def test_use_config_restores_on_exception(monkeypatch):
     reload_logger_module()
 
     class DummyLoader:
-        def __init__(self, base_path, filenames):
+        def __init__(self, base_path, filenames,name=None):
             self.base_path = base_path
             self.filenames = filenames
         def load(self):

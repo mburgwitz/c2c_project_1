@@ -2,6 +2,9 @@ from basisklassen import FrontWheels, BackWheels
 from util.logger import Logger
 from util.config.manager import ConfigManager
 import time
+from typing import List, Any
+from datetime import datetime
+import pandas as pd
 
 class BaseCar:
     """ Provides basic driving functionality.
@@ -34,11 +37,11 @@ class BaseCar:
         
         # load config
         self.log.debug('load config')
-        ConfigManager.load('./config', cfg_name, alias ='car')
+        ConfigManager.load('./config', cfg_name, name = cfg_name)
 
         # set initial values based on config
-        self.__steering_angle = ConfigManager.get('steering_angle',name='car')
-        self.__speed = ConfigManager.get('speed',name='car')
+        self.__steering_angle = ConfigManager.get('steering_angle',name=cfg_name)
+        self.__speed = ConfigManager.get('speed',name=cfg_name)
         self.__direction = 1 if self.__speed > 0 else (-1 if self.__speed < 0 else 0)
 
         self.log.debug(f'imported steering_angle: {self.__steering_angle}, speed: {self.__speed} and got direction {self.__direction}')
@@ -46,10 +49,7 @@ class BaseCar:
         self.__fw = FrontWheels()
         self.__bw = BackWheels()             
 
-        ConfigManager.load(base_path = 'config',
-                           filenames= 'fahrplan.json',
-                           alias = 'fahrplan'
-                           )
+        self.drive_log = {}
 
         self.log.info("init finished")
 
@@ -81,7 +81,7 @@ class BaseCar:
         new_angle : int
             The new steering angle in degrees.
         """
-        self.__steering_angle = self.__checkSteeringAngle(new_angle)
+        self.__steering_angle = self.check_steering_angle(new_angle)
     
     # Definition der property für __speed (getter)
     @property
@@ -107,7 +107,7 @@ class BaseCar:
         new_speed : int
             The new car speed.
         """
-        self.__speed = self.__checkSpeed(new_speed)
+        self.__speed = self.check_speed(new_speed)
     
     # Definition der property für __direction (getter)
     @property
@@ -129,7 +129,7 @@ class BaseCar:
     # private methods
     #------------------------------------
     
-    def __checkSteeringAngle(self, angle: int) -> int:
+    def check_steering_angle(self, angle: int) -> int:
         """
         Clamp the angle to the valid steering range.
 
@@ -151,7 +151,7 @@ class BaseCar:
             return self.MAX_STEERING_ANGLE
         return angle
     
-    def __checkSpeed(self, speed: int) -> int:
+    def check_speed(self, speed: int) -> int:
         """
         Clamp the speed to the valid speed range.
 
@@ -199,31 +199,35 @@ class BaseCar:
 
         self.log.debug(f"start drive")
 
-        # Prüfen, ob Winkel neu gesetzt wurde
-        if angle is not None:
-            self.steering_angle = angle
+        try:
+            # Prüfen, ob Winkel neu gesetzt wurde
+            if angle is not None:
+                self.steering_angle = angle
 
-        # Prüfen, ob Geschwindigkeit neu gesetzt wurde
-        if speed is not None:
-            self.speed = speed
+            # Prüfen, ob Geschwindigkeit neu gesetzt wurde
+            if speed is not None:
+                self.speed = speed
 
-        # Fahrtrichtung durch das Vorzeichen von speed bestimmen
-        if self.speed > 0:
-            self.__bw.forward()
-            self.__direction = 1
-        elif self.speed < 0:
-            self.__bw.backward()
-            self.__direction = -1
-        else:
+            # Fahrtrichtung durch das Vorzeichen von speed bestimmen
+            if self.speed > 0:
+                self.__bw.forward()
+                self.__direction = 1
+            elif self.speed < 0:
+                self.__bw.backward()
+                self.__direction = -1
+            else:
+                self.stop()
+
+            self.log.debug(f"speed: {self.speed}, angle: {self.steering_angle}, direction: {self.direction}")
+
+            # Ansteuern der Lenkung / setzen des Lenkwinkels
+            self.__fw.turn(self.steering_angle)
+
+            # Geschwindigkeit setzen. Absolutwert nutzen, da nur Werte >= 0 akzeptiert werden
+            self.__bw.speed = abs(self.speed)        
+        except Exception as e:
+            self.log.error(f"{e}")
             self.stop()
-
-        self.log.debug(f"speed: {self.speed}, angle: {self.steering_angle}, direction: {self.direction}")
-
-        # Ansteuern der Lenkung / setzen des Lenkwinkels
-        self.__fw.turn(self.steering_angle)
-
-        # Geschwindigkeit setzen. Absolutwert nutzen, da nur Werte >= 0 akzeptiert werden
-        self.__bw.speed = abs(self.speed)        
 
     def stop(self):
         """
@@ -243,18 +247,20 @@ class BaseCar:
 
         self.log.debug("car stopped")
 
-    def driveSchedule(self, schedule: str):
-        """driveSchedule _summary_
+    def drive_fixed_route(self, 
+                       schedule: str, 
+                       base_path: str = 'config', 
+                       filename: str = 'fahrplan.json',
+                       log_tour: bool = True):
 
-        _extended_summary_
 
-        Parameters
-        ----------
-        schedule : str
-            _description_
-        """
+        ConfigManager.load(base_path = base_path,
+                           filenames = filename,
+                           name = "fahrplan"
+                           )
+        
         self.log.debug(f"loading schedule {schedule}")
-        mode = ConfigManager.get(schedule, name = 'fahrplan')
+        mode = ConfigManager.get(schedule, name = "fahrplan")
         self.log.debug(f"schedule {schedule} loaded: {mode}")
 
         # iterate through every line in the schedule
@@ -263,12 +269,17 @@ class BaseCar:
         #   modes: 
         #       'd' for 'drive. ['d', speed, angle, time]
         #       's' for 'stop.  ['s', time]
-
         try:
-            for cmd in mode['schedule']:
+            for idx, cmd in enumerate(mode['schedule']):
+                self.log.debug(f"iterate cmd[{idx}]: {cmd}")
                 md = str.lower(cmd[0])
                 
                 t = cmd[-1]
+
+                # initialize log at start of the tour
+                if log_tour and idx == 0:
+                    self.new_log_entry(schedule)
+
                 # type check and value check
                 if not isinstance(t,(int, float)) and t > 0.0:
                     raise ValueError(f'Wrong type or value for time: \
@@ -281,9 +292,9 @@ class BaseCar:
                     # type check
                     if  all(isinstance(x, int) or x is None for x in (speed, angle)):
                         self.log.debug(f"driving with speed {speed} and angle {angle} for {t} seconds")
+
                         self.drive(speed, angle)
-                        time.sleep(t)
-                        
+
                     else:
                         raise ValueError(f'Wrong type for speed and/or angle: \
                                         speed type({type(speed)}), angle type({type(angle)}). \
@@ -291,9 +302,19 @@ class BaseCar:
                 elif md == 's':
                         self.log.debug(f"stopping for {t} seconds")
                         self.stop()
-                        time.sleep(t)
+                        
                 else:
                     raise ValueError(f'Wrong value for mode. Got {md}, expected "d" or "s".')
+                
+                # add log entry to log after all values are set
+                if log_tour:                    
+                    data = {"speed" : self.speed, 
+                            "angle" : self.steering_angle, 
+                            "direction" : self.direction }
+                    self.add_log_to_entry(schedule, data)
+
+                # exectute previously set task for t seconds
+                time.sleep(t)
                 
             
         except Exception as e:
@@ -302,8 +323,36 @@ class BaseCar:
         finally:
             self.stop()
 
+    def get_log_columns(self):
+        return ["speed", "direction", "angle", "timestamp"]
+
+    def new_log_entry(self, entry_name: str):
+        cols = self.get_log_columns()
+        self.log.debug(f"new log '{entry_name}' with cols {cols} type({type(cols)})")
+        self.drive_log[entry_name] = pd.DataFrame(columns=cols)
+        self.log.debug(f"initialized log {entry_name}")
+    
+    def add_log_to_entry(self, entry_name: str, data: dict):
+        if entry_name not in self.drive_log.keys():
+            raise ValueError(f"No Log with name {entry_name}")
+        
+        if 'timestamp' not in data.keys():
+            data['timestamp'] = datetime.now().strftime('%Y.%m.%d %H:%M:%S')
+
+        # fetch columns defined in get_log_columns() and get corresponding entry from data
+        # assign None if column is not found
+        row = {col: data.get(col, None) for col in self.get_log_columns()}
+
+        self.log.info(f"logging data: {data}")
+
+        self.drive_log[entry_name].loc[len(self.drive_log[entry_name])] = row
+        self.log.debug(f"added {row} to log {entry_name}")
+        
+
 
 if __name__ == '__main__': 
 
-    car = BaseCar()
-    car.driveSchedule("fahrmodus_1")
+    car = BaseCar() 
+    car.drive_fixed_route("fahrmodus_1")
+
+    car.log.debug(f"complete log:  {car.drive_log}")

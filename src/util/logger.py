@@ -125,11 +125,13 @@ class Logger:
                     cfg = ConfigManager.get_manager(
                         base_path=self._config_path,
                         filenames=self._config_name,
+                        name="logging"
                     )
                 else:
                     cfg = ConfigManager(
                         base_path=self._config_path,
                         filenames=self._config_name,
+                        name="logging"
                     )
 
                 logging.debug('loading config with ConfigManager')

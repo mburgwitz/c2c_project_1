@@ -1,24 +1,41 @@
 {
     "fahrmodus_1": {
+        "sensors" : null,
+        "mode": {
+            "name": "fixed"
+        },
         "schedule": [
-            ["d", null, null, 3],
+            ["d", 30, 90, 1],
             ["s", 1],
-            ["d", -30, null, 3]
+            ["d", -30, null, 1]
         ]
     },
     "fahrmodus_2" : {
+        "sensors" : null,
+        "mode": {
+            "name": "fixed"
+        },
         "schedule": [
-            ["d", null, null, 3],
-            ["s", 1],
-            ["d", -30, null, 3]
-        ]
-    },
-    "fahrmodus_3" : {
-        "schedule": [
-            ["d", null, null, 1],
-            ["d", null, 135, 8],
+            ["d", 30, 90, 1],
+            ["d", null, 45, 8],
             ["d", -30,  null, 8],
             ["d", null, 90, 1]            
         ]
+    },
+    "fahrmodus_3": {
+        "sensors" : "us",
+        "sensor_defs": {
+            "us_stop_distance": 10.0
+        },
+        "mode": {
+            "name": "random",
+            "method": "",
+            "variables": ["time", "speed", "angle"]
+        }
+    },
+    "fahrmodus_4": {
+        "sensors" : "us",
+        "mode": "random"
+        
     }
 }

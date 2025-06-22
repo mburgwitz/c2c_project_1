@@ -25,12 +25,12 @@
     "loggers": {
       "BaseCar": {
         "handlers": ["console"],
-        "level": "DEBUG",
+        "level": "INFO",
         "propagate": false
       },
       "SonicCar": {
         "handlers": ["console"],
-        "level": "DEBUG",
+        "level": "INFO",
         "propagate": false
       }
     }

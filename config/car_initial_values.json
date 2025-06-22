@@ -1,4 +1,13 @@
 {
     "speed": 0,
-    "steering_angle": 90
+    "steering_angle": 90,
+
+    "ultrasonic": {
+        "polltime": 0.2,
+        "sensor": {
+            "preparation_time": 0.01,
+            "impuls_length": 0.00001,
+            "timeout": 0.05
+        }
+    }
 }
