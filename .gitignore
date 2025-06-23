@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 config.json
 pytest.ini
+=======
+fahrt_log.json
+
+>>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
