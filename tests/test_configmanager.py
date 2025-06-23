@@ -530,7 +530,7 @@ def test_module_level_load_and_merge(tmp_path):
     cm.reset()
     cm.load(tmp_path, "a.json", "main")
     cm.load(tmp_path, "b.json", "b")
-    cm._instance.merge_configs("main", "b")
+    cm.merge_configs("main", "b")
 
     assert cm.get("x", name="main") == 1
     assert cm.get("y", name="main") == 2
@@ -590,3 +590,20 @@ def test_get_configs(tmp_path):
     names = set(ConfigManager.get_configs())
     assert names >= {"main", "two"}
 
+def test_class_watch_and_reload(tmp_path):
+    fp = tmp_path / "cw.json"
+    fp.write_text(json.dumps({"v": 1}), encoding="utf-8")
+
+    ConfigManager.reset()
+    ConfigManager.load(tmp_path, "cw.json", "main", watch=False, reload_interval=0.01)
+
+    ConfigManager.start_watch("main")
+    assert ConfigManager.is_watching("main")
+
+    fp.write_text(json.dumps({"v": 2}), encoding="utf-8")
+    ConfigManager.reload("main")
+
+    assert ConfigManager.get("v", name="main") == 2
+
+    ConfigManager.stop_watch("main")
+    assert not ConfigManager.is_watching("main")

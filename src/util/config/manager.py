@@ -138,22 +138,59 @@ class ConfigManager:
         )
     
     @classmethod
+    def merge_configs(cls, target: str, source: str) -> Dict[str, Any]:
+        """Merge ``source`` configuration into ``target`` using the singleton."""
+        if cls._instance is None:
+            raise RuntimeError("No configuration loaded")
+        return cls._instance._merge_configs(target, source)
+
+    @classmethod
+    def reload(cls, name: Optional[str] = None) -> Dict[str, Any]:
+        """Reload configuration from disk using the singleton."""
+        if cls._instance is None:
+            raise RuntimeError("No configuration loaded")
+        return cls._instance._reload(name=name)
+
+    @classmethod
+    def start_watch(cls, name: Optional[str] = None) -> None:
+        """Start the background watch thread using the singleton."""
+        if cls._instance is None:
+            raise RuntimeError("No configuration loaded")
+        cls._instance._start_watch(name)
+
+    @classmethod
+    def stop_watch(cls, name: Optional[str] = None) -> None:
+        """Stop the background watch thread using the singleton."""
+        if cls._instance is None:
+            raise RuntimeError("No configuration loaded")
+        cls._instance._stop_watch(name)
+
+    @classmethod
+    def is_watching(cls, name: Optional[str] = None) -> bool:
+        """Check if the watch thread is running on the singleton."""
+        if cls._instance is None:
+            raise RuntimeError("No configuration loaded")
+        return cls._instance._is_watching(name)
+    
+    @classmethod
     def reset_instance(cls) -> None:
         """Reset the singleton instance and stop any running watcher."""
         with cls._lock:
             if cls._instance is not None:
                 try:
-                    if cls._instance.is_watching():
-                        cls._instance.stop_watch()
+                    if cls._instance._is_watching():
+                        cls._instance._stop_watch()
                 except KeyError:
                     pass
             cls._instance = None
 
-    def __new__(cls,
-                base_path: Union[str, Path, List[Union[str, Path]]],
-                filenames: Union[str, Path, List[Union[str, Path]]],
-                *args, **kwargs
-    ) -> 'ConfigManager':
+    def __new__(
+        cls,
+        base_path: Union[str, Path, List[Union[str, Path]]],
+        filenames: Union[str, Path, List[Union[str, Path]]],
+        *args,
+        **kwargs,
+    ) -> "ConfigManager":
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(ConfigManager, cls).__new__(cls)
@@ -169,6 +206,11 @@ class ConfigManager:
                 cls._instance.get = cls._instance._get
                 cls._instance.remove = cls._instance._remove
                 cls._instance.get_configs = cls._instance._get_configs
+                cls._instance.merge_configs = cls._instance._merge_configs
+                cls._instance.reload = cls._instance._reload
+                cls._instance.start_watch = cls._instance._start_watch
+                cls._instance.stop_watch = cls._instance._stop_watch
+                cls._instance.is_watching = cls._instance._is_watching
         return cls._instance
 
 
@@ -179,10 +221,10 @@ class ConfigManager:
         name: str,
         schema: Optional[Dict[str, Any]] = None,
         watch: bool = False,
-        reload_interval: float = 1.0
+        reload_interval: float = 1.0,
     ) -> None:
         # Prevent reinitialization on subsequent calls
-        if getattr(self, '_initialized', False):
+        if getattr(self, "_initialized", False):
             return
 
         self._initialized = True
@@ -226,19 +268,21 @@ class ConfigManager:
 
         self.logger.debug(
             "ConfigManager initialized with paths=%s, files=%s, watch=%s",
-            self.base_paths, self.filenames, self.watch
+            self.base_paths, 
+            self.filenames, 
+            self.watch,
         )
 
         # For watch mode, load immediately then start watcher
         if self.watch:
             self._load()
-            self.start_watch()
+            self._start_watch()
 
     def use_logger(self) -> None:
         """Switch logger to the project logger after configuration."""
         from util.logger import Logger
         self.logger = Logger.get_logger(__name__)
-        self.logger.disabled = False        
+        self.logger.disabled = False
         self.logger.info(f"Switched to project logger under {self.logger}")
 
 
@@ -363,13 +407,13 @@ class ConfigManager:
         if watch or merge_into:
             self._load(name=name)
             if watch:
-                self.start_watch(name)
+                self._start_watch(name)
 
         if merge_into is not None:
-            self.merge_configs(merge_into, name)
+            self._merge_configs(merge_into, name)
 
 
-    def merge_configs(self, target: str, source: str) -> Dict[str, Any]:
+    def _merge_configs(self, target: str, source: str) -> Dict[str, Any]:
         """Merge ``source`` configuration into ``target`` configuration."""
         
         if target not in self._states or source not in self._states:
@@ -390,8 +434,8 @@ class ConfigManager:
         """Remove a configuration from the manager."""
         if name not in self._states:
             raise KeyError(f"unknown config: {name}")
-        if self.is_watching(name):
-            self.stop_watch(name)
+        if self._is_watching(name):
+            self._stop_watch(name)
 
         del self._states[name]
         self._merge_map.pop(name, None)
@@ -443,11 +487,11 @@ class ConfigManager:
         raise FileNotFound(self.base_paths[0] / f)
 
     def _load(
-            self,
-            *,
-            name: Optional[str] = None,
-            filenames: Optional[Union[str, Path, List[Union[str, Path]]]] = None,
-            watch: Optional[bool] = None,
+        self,
+        *,
+        name: Optional[str] = None,
+        filenames: Optional[Union[str, Path, List[Union[str, Path]]]] = None,
+        watch: Optional[bool] = None,
         ) -> Dict[str, Any]:
         """Load configuration files for the given configuration name."""
 
@@ -474,8 +518,11 @@ class ConfigManager:
             names = st["filenames"]
 
         with self.__class__._lock:
-            self.logger.info("Loading configuration files (%s): %s", name, [str(n) for n in names])
+            self.logger.info(
+                "Loading configuration files (%s): %s", name, [str(n) for n in names]
+            )
             from util.config.loaders import JSONLoader
+
             sections: Dict[str, Any] = {}
             st["file_paths"] = {}
 
@@ -491,7 +538,9 @@ class ConfigManager:
                 try:
                     data = loader.load()
                 except Exception as e:
-                    self.logger.error("Loading configuration file %s failed: %s", path, e)
+                    self.logger.error(
+                        "Loading configuration file %s failed: %s", path, e
+                    )
                     raise
                 sections[str(fname)] = data
                 st["file_paths"][str(fname)] = path
@@ -550,7 +599,7 @@ class ConfigManager:
         for var, val in os.environ.items():
             if not var.startswith(prefix):
                 continue
-            keys = var[len(prefix):].split("__")
+            keys = var[len(prefix) :].split("__")
             keys = [k.lower() for k in keys]
             try:
                 parsed = json.loads(val)
@@ -646,7 +695,7 @@ class ConfigManager:
             return tuple(cfg[k] for k in keys)
 
 
-    def reload(self, name: Optional[str] = None) -> Dict[str, Any]:
+    def _reload(self, name: Optional[str] = None) -> Dict[str, Any]:
         """Explicitly reload the configuration from disk."""
         return self._load(name=name)
     
@@ -655,17 +704,13 @@ class ConfigManager:
     # Watcher management
     # ------------------------------------------------------------------
 
-    def is_watching(self, name: Optional[str] = None) -> bool:
+    def _is_watching(self, name: Optional[str] = None) -> bool:
         """Return True if the background watch thread is running."""
         if name is None:
             name = self._active
         st = self._states[name]
         th = st.get("watch_thread")
         return th is not None and th.is_alive()
-
-    def start_watch(self, name: Optional[str] = None) -> None:
-        """Public method to start the background watch thread."""
-        self._start_watch(name)
 
     def _start_watch(self, name: Optional[str] = None) -> None:
         """
@@ -684,7 +729,11 @@ class ConfigManager:
             self._watch_thread = thread
             self._stop_event = st["stop_event"]
         thread.start()
-        self.logger.info("Started config watch thread (interval=%.2fs) for %s", st["reload_interval"], name)
+        self.logger.info(
+            "Started config watch thread (interval=%.2fs) for %s", 
+            st["reload_interval"], 
+            name,
+        )
 
     def _watch_loop(self, name: str) -> None:
         """
@@ -713,14 +762,18 @@ class ConfigManager:
                     )
                     continue
                 if mtime != st["mtimes"].get(str(fname)):
-                    self.logger.info("Detected change in %s, reloading config %s", fname, name)
+                    self.logger.info(
+                        "Detected change in %s, reloading config %s", fname, name
+                    )
                     try:
                         self._load(name=name)
                     except Exception:
-                        self.logger.error("Error reloading config %s after change in %s", name, fname)
+                        self.logger.error(
+                            "Error reloading config %s after change in %s", name, fname
+                        )
                     break
 
-    def stop_watch(self, name: Optional[str] = None) -> None:
+    def _stop_watch(self, name: Optional[str] = None) -> None:
         """Stop the background watch thread."""
         if name is None:
             name = self._active
@@ -740,14 +793,14 @@ class ConfigManager:
     # Context manager interface
     # ------------------------------------------------------------------
 
-    def __enter__(self) -> 'ConfigManager':
-        if self.watch and not self.is_watching():
-            self.start_watch()
+    def __enter__(self) -> "ConfigManager":
+        if self.watch and not self._is_watching():
+            self._start_watch()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        if self.is_watching():
-            self.stop_watch()
+        if self._is_watching():
+            self._stop_watch()
 
 class _AttrWrapper:
     """Wrapper to access dictionary keys as attributes.

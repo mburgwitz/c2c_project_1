@@ -2,7 +2,6 @@ from basisklassen import FrontWheels, BackWheels
 from util.logger import Logger
 from util.config.manager import ConfigManager
 import time
-from typing import List, Any
 from datetime import datetime
 import pandas as pd
 
