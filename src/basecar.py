@@ -104,15 +104,23 @@ class BaseCar:
         '''
         self.__bw.stop()
         self.__direction = 0
+    
+    def fahrmodus1(self, geschwindigkeit, fahrzeit):
+        self.drive(speed = geschwindigkeit, angle = 90)
+        time.sleep(fahrzeit/2)
+        self.drive(speed = geschwindigkeit *-1, angle = 90)
+        time.sleep(fahrzeit/2)
+        self.stop()
 
 
 if __name__ == '__main__':
 
     car = BaseCar()
-    car.drive(30, 90)
-    time.sleep(2)
-    car.stop()
-    car.drive(-30, 45)
-    time.sleep(2)
-    car.drive(0, 90)
-    car.stop()
+    car.fahrmodus1(30, 4)
+    # car.drive(30, 90)
+    # time.sleep(2)
+    # car.stop()
+    # car.drive(-30, 45)
+    # time.sleep(2)
+    # car.drive(0, 90)
+    # car.stop()

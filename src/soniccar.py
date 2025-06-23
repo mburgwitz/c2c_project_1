@@ -66,7 +66,7 @@ class SonicCar(BaseCar):
         if abstand is None: abstand = self.mindestabstand
         start_fahrzeit = time.time()
         if speed < 0 : print("Rückwärtsfahrt übergeben - wurde seitens des Programms auf Vorwärtsfahrt geändert um einen Unfall zu vermeiden.")
-        super().drive(abs(speed), angle) # speed wird immer als Absolutwert genommen, um immer vorwärts zufahren, da die Sensoren vorn verbaut sind.
+        self.drive(abs(speed), angle) # speed wird immer als Absolutwert genommen, um immer vorwärts zufahren, da die Sensoren vorn verbaut sind.
         while time.time() - start_fahrzeit < fahrzeit:
             if self.get_distance() <= abstand:
                 break        
@@ -82,12 +82,12 @@ class SonicCar(BaseCar):
         if abstand is None: abstand = self.mindestabstand
         start_fahrzeit = time.time()
         if speed < 0 : print("Rückwärtsfahrt übergeben - wurde seitens des Programms auf Vorwärtsfahrt geändert um einen Unfall zu vermeiden.")
-        super().drive(abs(speed), angle) # speed wird immer als Absolutwert genommen, um immer vorwärts zufahren, da die Sensoren vorn verbaut sind.
+        self.drive(abs(speed),angle) # speed wird immer als Absolutwert genommen, um immer vorwärts zufahren, da die Sensoren vorn verbaut sind.
         while time.time() - start_fahrzeit < fahrzeit:
             if self.get_distance() <= abstand:
-                super().drive(abs(speed)*-1, 135)
+                self.drive(abs(speed)*-1, 135)
                 time.sleep(2)
-            super().drive(abs(speed), angle)
+            self.drive(abs(speed), angle)
         self.stop()
 
 if __name__ == '__main__':
