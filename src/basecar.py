@@ -1,4 +1,5 @@
 from basisklassen import FrontWheels, BackWheels # Man könnte auch alles importieren, aber in diesem Fall sind nur Front/BackWheels erforderlich, dann wird der gesamte Code ausgeführt
+import time
 
 class BaseCar:
 
@@ -72,40 +73,59 @@ class BaseCar:
         self.__bw.stop()
         self.__direction = 0
 
+    def fahrmodus1(self, geschwindigkeit, fahrzeit):
+        self.drive(speed = geschwindigkeit, angle = 90)
+        time.sleep(fahrzeit/2)
+        self.drive(speed = geschwindigkeit *-1, angle = 90)
+        time.sleep(fahrzeit/2)
+        self.stop()
+
+    def fahrmodus2(self, geschwindigkeit, lenkwinkel):
+        self.drive(speed = geschwindigkeit, angle = 90)
+        time.sleep(1)
+        self.drive(speed = geschwindigkeit, angle = lenkwinkel)
+        time.sleep(8)
+        self.drive(speed = geschwindigkeit *-1, angle = lenkwinkel)
+        time.sleep(8)
+        self.drive(speed = geschwindigkeit *-1, angle = 90)
+        time.sleep(1)
+        self.stop()
+
 
 
 if __name__ == '__main__':
     car = BaseCar()
 
-    import time
-
     # Fahrmodus 1
-    car.drive(speed = 30)
-    time.sleep(3)
+    #car.fahrmodus1(30, 5)
+    # car.drive(speed = 30)
+    # time.sleep(3)
     
-    car.stop()
-    time.sleep(1)
+    # car.stop()
+    # time.sleep(1)
 
-    car.drive(speed = -30)
-    time.sleep(3)
+    # car.drive(speed = -30)
+    # time.sleep(3)
 
-    car.stop()
+    # car.stop()
 
 
-    time.sleep(3)
+    # time.sleep(3)
 
     # Fahrmodus 2
-    car.drive(speed = 30, angle= 90)
-    time.sleep(1)
+    car.fahrmodus2(30, 135)
+    car.fahrmodus2(30, 45)
+    # car.drive(speed = 30, angle= 90)
+    # time.sleep(1)
     
-    car.drive(speed = 30, angle = 135)
-    time.sleep(8)
+    # car.drive(speed = 30, angle = 135)
+    # time.sleep(8)
 
-    car.drive(speed= -30, angle = 135)
-    time.sleep(8)
+    # car.drive(speed= -30, angle = 135)
+    # time.sleep(8)
 
-    car.drive(speed = -30, angle= 90)
-    time.sleep(1)
+    # car.drive(speed = -30, angle= 90)
+    # time.sleep(1)
 
-    car.stop()
+    # car.stop()
     
