@@ -1,5 +1,4 @@
 fahrt_log.json
-./config/car_hardware_config.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -195,3 +194,4 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+src/config/car_hardware_config.json
