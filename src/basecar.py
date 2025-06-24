@@ -5,6 +5,8 @@ import time
 from datetime import datetime
 import pandas as pd
 
+from threading import Event
+
 class BaseCar:
     """ Provides basic driving functionality.
 
@@ -49,6 +51,9 @@ class BaseCar:
         self.__bw = BackWheels()             
 
         self.drive_log = {}
+
+        self._running = False
+        self._stop_event = Event()
 
         self.log.info("init finished")
 
@@ -244,7 +249,14 @@ class BaseCar:
         # Setzen der Fahrtichtung auf 0 (stationary)
         self.__direction = 0
 
-        self.log.debug("car stopped")
+        self.log.info("car stopped")
+
+    def hard_stop(self):
+        self.stop()
+        self.log.info("...hard")
+        self._stop_event.set()
+        self._running = False
+        
 
     def drive_fixed_route(self, 
                        schedule: str, 
@@ -262,6 +274,7 @@ class BaseCar:
         mode = ConfigManager.get(schedule, name = "fahrplan")
         self.log.debug(f"schedule {schedule} loaded: {mode}")
 
+        self._running = True
         # iterate through every line in the schedule
         # Format: [mode, int | null, int | null, int | float]
         #   JSON null is automatically converted to None
@@ -313,7 +326,11 @@ class BaseCar:
                     self.add_log_to_entry(schedule, data)
 
                 # exectute previously set task for t seconds
-                time.sleep(t)
+                if self._stop_event.wait(timeout=t):
+                    self.log.info(f"route manually terminated")
+                    self._running = False
+                    self._stop_event.clear()
+                    break
                 
             
         except Exception as e:

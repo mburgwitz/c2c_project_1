@@ -39,6 +39,8 @@ class SonicCar(BaseCar):
 
         self.drive_log = dict()
 
+        
+
     def get_distance(self, ignore_error: bool = False, types_to_ignore: List[int] = [-1,-2]) -> Union[Tuple[int, bool], None]:
         distance = self.__us.distance()
         
@@ -93,6 +95,9 @@ class SonicCar(BaseCar):
         super().stop()
         self.__us.stop()
 
+    def hard_stop(self) -> None:
+        super().hard_stop()
+        self.__us.stop()
 
     def get_log_columns(self) -> List[str]:
         cols = super().get_log_columns() + ['distance', 'delta_t']
@@ -116,13 +121,12 @@ class SonicCar(BaseCar):
         self.log.info(f"Evading with speed {tmp_speed} and angle {tmp_angle} for {tmp_time} seconds")
 
         self.drive(speed=tmp_speed, angle= tmp_angle)
-  
-        #time.sleep(tmp_time)
 
         start_time = time.time()
         t_delta = time.time() - start_time
 
-        while t_delta < tmp_time:
+        self._running = True
+        while (t_delta < tmp_time) and self._running:
             time.sleep(0.25)
             t_delta = time.time() - start_time
 
@@ -165,14 +169,13 @@ class SonicCar(BaseCar):
             stop_distance = cfg.fahrmodus_3.sensor_defs.us_stop_distance
             self.log.debug(f"stop distance: {stop_distance}")
             
-            continue_tour = True
-            
             log_name = 'exploration'
             self.new_log_entry(log_name)        
 
             start_exploration_time = time.time()
-        
-            while(continue_tour):
+
+            self._running = True
+            while(self._running):
                 start_time = time.time()
 
                 self.speed = normal_speed
@@ -199,7 +202,7 @@ class SonicCar(BaseCar):
                 
                 t_delta = time.time() - start_time
 
-                while t_delta < time_for_section:
+                while (t_delta < time_for_section) and self._running:
                     time.sleep(0.25)
                     t_delta = time.time() - start_time
                     self.log.debug(f"...time remaining: {t_delta}")
@@ -233,13 +236,13 @@ class SonicCar(BaseCar):
                     elif distance < stop_distance:
                         if stop_at_obstacle:
                             self.stop()
-                            continue_tour = False
+                            self._running = False
                             break
                         else:
                             self.evade_obstacle(log_name=log_name)
                 
                 if time.time() - start_exploration_time > drive_time:
-                    continue_tour = False
+                    self._running = False
                     self.log.info(f"drive time limit of {drive_time} seconds reached")
 
         except Exception as e:
