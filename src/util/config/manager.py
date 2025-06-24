@@ -9,7 +9,8 @@ class ConfigManager:
     """Centralised configuration handler.
 
     The manager is implemented as a singleton and keeps track of multiple
-    configurations which are identified by name. Configurations are loaded from JSON files and may be
+    configurations which are identified by name. 
+    Configurations are loaded from JSON files and may be
     monitored for changes.
 
     Attributes

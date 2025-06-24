@@ -1,15 +1,18 @@
-
 body {
     font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
     /*text-shadow: 0 0 5px #0ff, 0 0 15px #0ff;*/
     letter-spacing: 2px;
 }
 
-
 * {
     font-family: inherit;
     text-shadow: inherit;
     letter-spacing: inherit;
+}
+
+
+.container, .row, .col, .dbc__container {
+  overflow: visible !important;
 }
 
 /* Classes */
@@ -37,8 +40,13 @@ body {
   }
 
 /* menu styles */
+.driveOptions {
+  position: relative !important;
+  z-index: 20 !important;           /* entspricht dem zIndex der Col/Row oben */
+  overflow: visible !important;
+}
 
- .dropdown-toggle {
+.dropdown-toggle {
     background-color: transparent !important;
     border: 2px solid #0eecec !important;
     color: hsl(180, 89%, 49%) !important;
@@ -56,24 +64,47 @@ body {
     background-color: rgba(0, 0, 0, 0.8) !important;
     border: none !important;
     box-shadow: 0 0 15px #0eecec;
-    z-index: 9999 !important;
+
 }
 
 /* Einzelne Dropdown-Items */
 .driveOptions .dropdown-item {
+    
     color: #0eecec !important;
     background-color: transparent !important;
 }
 
 .driveOptions .dropdown-item:hover {
+    
     background-color: rgba(14, 236, 236, 0.2) !important;
     color: #bd0074 !important;
+}
+
+/* button styling */
+
+
+.btn {
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: bold;
+  color: #00ffff;
+  background-color: transparent;
+  border: 2px solid #00ffff;
+  border-radius: 6px;
+  padding: 10px 20px;
+  text-shadow: 0 0 5px #00ffff;
+  box-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+  transition: all 0.3s ease-in-out;
+}
+
+.btn:hover {
+  background-color: rgba(0, 255, 255, 0.1);
+  box-shadow: 0 0 20px #00ffff, 0 0 30px #00ffff;
+  cursor: pointer;
 }
 
 /* card styles */
 .clsC1, .clsC2, .clsC3, .clsC4, .clsC5 {
     color: #0eecec;
-    position: relative;
     background: linear-gradient(120deg, 
         rgba(255, 255, 255, 0.05) 25%, 
         rgba(255, 255, 255, 0.15) 50%, 
@@ -82,7 +113,11 @@ body {
     animation: cloudDrift 30s linear infinite;
     backdrop-filter: blur(2px);
     border-radius: 12px;
+
+    position: relative !important;
+    z-index: 1 !important;
 }
+
 /* Animationen */
 @keyframes headerAnimation {
     0% {
