@@ -285,8 +285,8 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
     prevent_initial_call=True 
 )
 def update_status_cards( n_intervals,current_label):
-    global start_time_driving, car_thread_running, timestamps, total_route
-    global total_drive_time, velocity, steering_angle, direction  
+    global total_route
+    global total_drive_time
     
     # Nur updaten, wenn der Button gerade "Stop" anzeigt (also Drive läuft)
     if current_label != "Stop":
