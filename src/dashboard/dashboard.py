@@ -164,12 +164,27 @@ def update_menu_label(*menu_items):
     Output("start_stop_button", "children"), 
     Input("start_stop_button", "n_clicks"),
     State("start_stop_button", "children"),
+    State("drive_mode_menu", "label"),
     prevent_initial_call=True 
 )
-def start_stop_button_clicked(n_clicks, current_label):
-    
+def start_stop_button_clicked(n_clicks, current_label, menu_label):
     # Toggle anhand des tatsächlich angezeigten Labels
-    return "Stop" if current_label == "Start" else "Start"
+    print(menu_label)
+    
+    if menu_label == 'Modes':
+        return 'ERROR'
+    
+    if menu_label == 'DriveMode 1':
+        car.fahrmodus1(30, 3.0)
+    elif menu_label == 'DriveMode 2':
+        car.fahrmodus2(30, 45)
+    elif menu_label == 'DriveMode 3':
+        car.drive_until_obstacle(30, 20)
+    elif menu_label == 'DriveMode 4':
+        car.explore(30, 20, 60)
+
+    #return "Stop" if current_label == "Start" else "Start"
+    return "Start"
     
 
 if __name__ == "__main__":
