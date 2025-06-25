@@ -1,5 +1,6 @@
 from basecar import BaseCar
 from basisklassen import Infrared
+from soniccar import SonicCar
 import numpy
 import time
 import util.json_loader as loader
@@ -9,6 +10,7 @@ class SensorCar(BaseCar):
     def __init__(self, steering_angle = 90, speed = 0, direction = 0):
         super().__init__(steering_angle, speed, direction)
         self.__irm = Infrared()
+        self.__usm = SonicCar()
         cfg = loader.readjson("/home/pi/Documents/git/c2c_project_1/src/config/car_hardware_config.json")
         self.__irm.set_references(ref=cfg["infrared_reference"])
 
@@ -54,19 +56,23 @@ class SensorCar(BaseCar):
           while True:
                data = self.__irm.read_digital()
                print(data)
-               if numpy.sum(data) > 2: break
+               distance = self.__usm.get_distance()
+               if numpy.sum(data) > 2  or distance < 20 : 
+                    print(data)
+                    print(distance)
+                    break
                elif data == [1,0,0,0,0]: self.drive(speed=geschwindigkeit*0.6, angle=45)
                elif data == [1,1,0,0,0] or data == [0,1,0,0,0]: self.drive(speed=geschwindigkeit*0.8, angle=68)
                elif data == [0,0,1,0,0] or data == [0,0,0,0,0] : self.drive(speed=geschwindigkeit, angle=90)
                elif data == [0,0,0,1,1] or data == [0,0,0,1,0]: self.drive(speed=geschwindigkeit*0.8, angle=109)
-               elif data == [0,0,0,0,1] : self.drive(speed=geschwindigkeit*0.6, angle=135)
+               elif data == [0,0,0,0,1] : self.drive(speed=geschwindigkeit*0.6, angle=135)  
           self.stop()
 
 
 if __name__ == "__main__":
-        car = SensorCar()
-        #car.test_infrared(10)
-        #car.follow_line_analog(60)
-        #car.reference_ground()
-        car.follow_line_digital(90)
-        #car.stop()
+     car = SensorCar()
+     #car.test_infrared(10)
+     #car.follow_line_analog(60)
+     #car.reference_ground()
+     car.follow_line_digital(60)
+     #car.stop()
