@@ -2,6 +2,8 @@ from basisklassen import FrontWheels, BackWheels
 import time
 import util.json_loader as loader
 
+from threading import Event
+
 class BaseCar:
     '''
     BaseCar Klasse ist die Klasse mit den Grundfahrfunktionen des Fahrzeuges.
@@ -37,6 +39,14 @@ class BaseCar:
         # Initialisierung der Datenaufzeichnung
         self.log = []
 
+        # Flag, ob ein Fahrprozess gerade läuft
+        # wird von Fahrprozessen abgefragt, wird beim Start eines Fahrmodus True gesetzt
+        self._running = False
+
+        # fancy time.sleep
+        # nutzt Event.wait, unterbrechung mit .set()
+        self._stop_event = Event()
+
     #Property auf Privat-Attribut __steering_angle, Aufruf und Setzen erlaubt
     @property
     def steering_angle(self):
@@ -49,10 +59,12 @@ class BaseCar:
     #Property auf Privat-Attribut __speed, Aufruf und Setzen erlaubt
     @property
     def speed(self):
+        print(f"get speed: {self.__speed}")
         return self.__speed
     
     @speed.setter
     def speed(self, speed: int):
+        print(f"set speed: {speed}")
         self.__speed = self.__checkSpeed(speed)
     
     @property
@@ -143,6 +155,12 @@ class BaseCar:
         #Klassen-Interne Richtung auf 0 setzen.
         self.__direction = 0
 
+    def hard_stop(self):
+        """ Unterbricht zusätzlich loops und timer
+        """
+        self.stop()
+        self._stop_event.set()
+        self._running = False
 
     def fahrmodus1(self, geschwindigkeit: int, fahrzeit: float):
         """fahrmodus1 
@@ -154,13 +172,24 @@ class BaseCar:
         fahrzeit : float
             Gesamtfahrzeit des Fahrzeugs
         """
+        self._running = True
+        self._stop_event.clear()
+
         self.drive(speed = geschwindigkeit, angle = 90)
         self._log_status()
-        time.sleep(fahrzeit/2)
 
+        if self._stop_event.wait(timeout=fahrzeit/2):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
+            
         self.drive(speed = geschwindigkeit *-1, angle = 90)
         self._log_status()
-        time.sleep(fahrzeit/2)
+
+        if self._stop_event.wait(timeout=fahrzeit/2):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
         
         self.stop()
         self._log_status()
@@ -177,21 +206,40 @@ class BaseCar:
         lenkwinkel : float
             Lenkwinkel für die Kreisfahrt
         """
+        self._running = True
+        self._stop_event.clear()
+
         self.drive(speed = geschwindigkeit, angle = 90)
         self._log_status()
-        time.sleep(1)
+        
+        if self._stop_event.wait(timeout=1):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit, angle = lenkwinkel)
         self._log_status()
-        time.sleep(8)
+        
+        if self._stop_event.wait(timeout=8):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit *-1, angle = lenkwinkel)
         self._log_status()
-        time.sleep(8)
+        
+        if self._stop_event.wait(timeout=8):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit *-1, angle = 90)
         self._log_status()
-        time.sleep(1)
+        
+        if self._stop_event.wait(timeout=1):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.stop()
         self._log_status()
@@ -200,16 +248,5 @@ class BaseCar:
 
 if __name__ == '__main__':
     car = BaseCar()
-    #car.steering_angle = 10
-    #Fahren
-    car.drive(30, 90)
-    #Für 2s erlauben, dass Fahrzeug fährt
-    time.sleep(2)
-    # Fahrzeug anhalten
-    car.stop()
-    # Rueckwaerts fahren, um 45Grad Lenken
-    car.drive(-30, 45)
-    time.sleep(2)
-    # Fahrzeug anhalten durch speed=0
-    car.drive(0, 90)
-    car.stop()
+    car.fahrmodus2(30,45)
+   
