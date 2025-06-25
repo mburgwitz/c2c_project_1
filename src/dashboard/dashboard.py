@@ -1,9 +1,12 @@
 import dash
-from dash import dcc, html, Output, Input, State, ctx, callback
+from dash import dcc, html, Output, Input, State, ctx, callback, no_update
 import dash_bootstrap_components as dbc
+from dash.exceptions import PreventUpdate
 import plotly.express as px
 from pathlib import Path
+import time
 
+from threading import Thread, Lock
 from soniccar import SonicCar
 
 #**********************************************
@@ -23,6 +26,20 @@ index_string = index_template.replace("{{retro_background}}", retro_html)
 # Main App and objects
 #**********************************************
 car = SonicCar()
+car_thread_running = False
+car_lock = Lock()
+
+# for statistics
+start_time_driving = None
+stop_time_driving = None
+
+total_drive_time = None
+total_route = None
+velocity = []
+steering_angle = []
+direction = []
+timestamps = []
+
 
 app = dash.Dash(__name__, 
                 external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -32,8 +49,52 @@ app = dash.Dash(__name__,
 #**********************************************
 # Functions
 #**********************************************
-#def set_car_values(speed, angle, stop_distance):
 
+def reset_global_statistic_vars():
+    global total_drive_time
+    global velocity 
+    global steering_angle 
+    global direction
+    global timestamps 
+    global total_route
+
+    print("reset_global_statistic_vars")
+
+    total_route = 0
+    total_drive_time = 0
+    velocity = []
+    steering_angle = []
+    direction = []
+    timestamps = []
+    total_route = []
+
+# worker process during car drive thread
+def car_process(menu_selection: str):
+    global car_thread_running
+    
+    # ctr=0
+    # while car_thread_running:
+    #     time.sleep(0.25)
+    #     ctr += 1
+    #     print(ctr)
+    # return
+
+    try:
+        car_thread_running = True
+        if menu_selection == "DriveMode 1":
+            car.fahrmodus1(30,4.0)
+        elif menu_selection == "DriveMode 2":
+            car.fahrmodus2(30,45)
+        elif menu_selection == "DriveMode 3":
+            car.drive_until_obstacle()
+        elif menu_selection == "DriveMode 4":
+            car.explore()
+        else:
+            car_thread_running = False
+    except Exception as e:
+        raise Exception(e)
+    finally:
+        car_thread_running = False
 
 
 #**********************************************
@@ -54,7 +115,7 @@ def create_card(title: str, text: str, className: str, image: str = None):
     config_body = []
     #config_body.append(html.H4(title, className=className+'Title'))
     config_body.append(dcc.Markdown(title, className=className+'Title'))
-    config_body.append(html.P(text, className=className+'Text'))
+    config_body.append(html.P(text, className=className+'Text', id = className+'TextId'))
 
     config.append(dbc.CardBody(config_body))
     return dbc.Card(config, className=className)
@@ -71,6 +132,8 @@ fig_2.update_xaxes(tickfont=dict(family='Rockwell', color='#0eecec', size=14))
 fig_2.update_yaxes(tickfont=dict(family='Rockwell', color='#0eecec', size=14))
 
 start_stop_button = dbc.Button("Start", id="start_stop_button")
+car_poll_interval = dcc.Interval(id="car_poll_interval", interval=500, disabled=True)
+car_status_interval = dcc.Interval(id="car_status_interval", interval=250, disabled=True)
 
 drive_menu_options = [
     dbc.DropdownMenuItem("DriveMode 1", id="drop1"),
@@ -88,6 +151,8 @@ drive_mode_menu = dbc.DropdownMenu(label="Modes",
 #**********************************************
 
 app.layout = dbc.Container([
+        car_poll_interval,
+        car_status_interval,
         hidden_div,
         dbc.Row([
             dbc.Col(header, width=10),
@@ -162,30 +227,110 @@ def update_menu_label(*menu_items):
 # Start button
 @app.callback(
     Output("start_stop_button", "children"), 
+    Output("car_poll_interval", "disabled"),
+    Output("car_status_interval", "disabled"),
+
     Input("start_stop_button", "n_clicks"),
+    Input("car_poll_interval", "n_intervals"),
+
     State("start_stop_button", "children"),
     State("drive_mode_menu", "label"),
     prevent_initial_call=True 
 )
-def start_stop_button_clicked(n_clicks, current_label, menu_label):
-    # Toggle anhand des tatsächlich angezeigten Labels
-    print(menu_label)
-    
-    if menu_label == 'Modes':
-        return 'ERROR'
-    
-    if menu_label == 'DriveMode 1':
-        car.fahrmodus1(30, 3.0)
-    elif menu_label == 'DriveMode 2':
-        car.fahrmodus2(30, 45)
-    elif menu_label == 'DriveMode 3':
-        car.drive_until_obstacle(30, 20)
-    elif menu_label == 'DriveMode 4':
-        car.explore(30, 20, 60)
+def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selection):
+    global car_thread_running
+    global start_time_driving
 
-    #return "Stop" if current_label == "Start" else "Start"
-    return "Start"
+    trigger_id = ctx.triggered_id
+
+    with car_lock:
+        if trigger_id == "car_poll_interval":
+            if car_thread_running:
+                print("car thread running")
+                return no_update, no_update, no_update
+            
+            stop_time_driving = time.time()
+            print(f"car thread ende: {stop_time_driving}")
+            
+            return "Start", True, True
+        
+        elif trigger_id == "start_stop_button":
+            if menu_selection == "Modes":
+                return "Start", True, True # polling stays deactivated,
+            
+            if current_label == "Stop":
+                car.hard_stop()
+                car_thread_running = False
+                stop_time_driving = time.time()
+                return "Start", True, True # deactivate polling
+            else:
+                Thread(target=car_process, args=(menu_selection,), daemon=True).start()
+                reset_global_statistic_vars()
+
+                car_thread_running = True
+                start_time_driving = time.time()
+                print(f"car thread start: {start_time_driving}")
+                return "Stop", False, False # activate polling
+        else:
+            return "Start", True, True
+
+@app.callback(
+    Output("clsC1TextId", "children"),
+    Output("clsC2TextId", "children"),
+    Output("clsC3TextId", "children"),
+    Output("clsC4TextId", "children"),
+    Output("clsC5TextId", "children"),
+    Input("car_status_interval", "n_intervals"),
+    State("start_stop_button", "children"),
+    prevent_initial_call=True 
+)
+def update_status_cards( n_intervals,current_label):
+    global total_route
+    global total_drive_time
     
+    # Nur updaten, wenn der Button gerade "Stop" anzeigt (also Drive läuft)
+    if current_label != "Stop":
+        raise PreventUpdate
+    
+    with car_lock:
+        velocity.append(car.speed)
+        steering_angle.append(car.steering_angle)
+        direction.append(car.direction)
+        timestamps.append(time.time())
+
+    print(velocity)
+
+    # just append values if we just started to drive
+    if car_thread_running == False:
+        return no_update, no_update, no_update, no_update, no_update
+    
+    print(" ... update status")
+    print(f" ......len(vel): {len(velocity)}")
+    # only calculate if we have at least 2 values and started the process already
+    if len(velocity) < 2:
+        return ["-"]*5
+
+    # Basiszeit rechnen
+    elapsed = time.time() - start_time_driving
+    total_drive_time = elapsed
+
+    # avg velocity between now and last timestamp times delta_t
+    delta_t     = timestamps[-1] - timestamps[-2]
+    segment     = (velocity[-1] + velocity[-2]) / 2 * delta_t
+    total_route = (total_route or 0) + segment
+
+    v_max = max(velocity)
+    v_min = min(velocity)
+    v_avg = sum(velocity) / len(velocity)
+
+    #print(f"v_max: {v_max}, v_min: {v_min}, v_avg: {v_avg}, total_route: {total_route}, total_drive_time: {total_drive_time}")
+    return (
+        f"{v_max:.2f}",
+        f"{v_min:.2f}",
+        f"{v_avg:.2f}",
+        f"{total_route:.2f}",
+        f"{total_drive_time:.2f}"
+    )
 
 if __name__ == "__main__":
     app.run_server(debug=True, host="0.0.0.0")

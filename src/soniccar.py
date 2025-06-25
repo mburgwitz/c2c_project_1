@@ -99,11 +99,13 @@ class SonicCar(BaseCar):
         '''
         print(f"Fahrmodus 3: Fahre vorwärts bis Distanz < {stop_distance} cm.")
         
+        self._running = True
+
         # Geradeaus fahren starten
         self.drive(speed, 90)
         log_freq = 0.25  # Log-Frequenz in Sekunden
         last_log_time = 0
-        while True:
+        while True and self._running:
             dist = self.get_distance()
 
             # Loggen, um die Distanzänderung zu sehen
@@ -134,38 +136,58 @@ class SonicCar(BaseCar):
         print(f"Fahrmodus 4: Starte Erkundungstour für {duration_s} Sekunden.")
         start_time = time.time()
 
-        while time.time() - start_time < duration_s:
+        self._running = True
+        self._stop_event.clear()
+
+        while (time.time() - start_time < duration_s) and self._running:
             print("Suche freien Weg...")
             # Starte die Vorwärtsfahrt
             self.drive(speed, 90)
 
             # Fahre vorwärts, solange der Weg frei ist
             while self.get_distance() > stop_distance:
-                if time.time() - start_time > duration_s: break # Zeitlimit prüfen
+                if (time.time() - start_time > duration_s) and self._running: break # Zeitlimit prüfen
                 time.sleep(0.05)
             
-            if not (time.time() - start_time < duration_s): break # Zeitlimit nach innerer Schleife prüfen
+            if not ((time.time() - start_time < duration_s) and self._running): break # Zeitlimit nach innerer Schleife prüfen
 
             print("Hindernis erkannt! Starte Ausweichmanöver.")
             self.stop()
-            time.sleep(0.5)
+            if self._stop_event.wait(timeout=0.5):
+                self.log.info(f"route manually terminated")
+                self._running = False
+                return
 
             # Ausweichmanöver: zurücksetzen, drehen, anhalten
             print("1. Zurücksetzen")
             self.drive(-speed, 90) # Rückwärts gerade
-            time.sleep(2)
+            
+            if self._stop_event.wait(timeout=1):
+                self.log.info(f"route manually terminated")
+                self._running = False
+                return
+                
             self.stop()
-            time.sleep(0.5)
+            if self._stop_event.wait(timeout=0.5):
+                self.log.info(f"route manually terminated")
+                self._running = False
+                return
 
             print("2. Drehen")
             # Zufällig nach links oder rechts drehen
             turn_angle = random.choice([self.MIN_STEERING_ANGLE, self.MAX_STEERING_ANGLE])
             self.drive(speed, turn_angle) # 0 Räder im Stand drehen-> aus erfahrung bewege ich mich doch
-            time.sleep(1)
+            if self._stop_event.wait(timeout=1):
+                self.log.info(f"route manually terminated")
+                self._running = False
+                return
             
             # Räder wieder gerade stellen, um für die nächste Runde bereit zu sein
             self.drive(speed, 90)
-            time.sleep(0.5)
+            if self._stop_event.wait(timeout=0.5):
+                self.log.info(f"route manually terminated")
+                self._running = False
+                return
 
         print("Erkundungstour beendet.")
         self.stop()
