@@ -5,9 +5,12 @@ from dash.exceptions import PreventUpdate
 import plotly.express as px
 from pathlib import Path
 import time
-
+import os
+#os.system("PYTHONPATH=src python3 src/dashboard/dashboard.py")
 from threading import Thread, Lock
 from soniccar import SonicCar
+
+
 
 #**********************************************
 # Background animation
