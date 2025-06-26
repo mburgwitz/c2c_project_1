@@ -20,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent.parent
 TEMPLATE_DIR = BASE_DIR / "templates"
 LOG_DIR = PROJECT_ROOT  / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 retro_html = (TEMPLATE_DIR / "retrobackground.html").read_text()
