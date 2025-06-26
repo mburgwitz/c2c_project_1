@@ -59,12 +59,12 @@ class BaseCar:
     #Property auf Privat-Attribut __speed, Aufruf und Setzen erlaubt
     @property
     def speed(self):
-        print(f"get speed: {self.__speed}")
+        #print(f"get speed: {self.__speed}")
         return self.__speed
     
     @speed.setter
     def speed(self, speed: int):
-        print(f"set speed: {speed}")
+        #print(f"set speed: {speed}")
         self.__speed = self.__checkSpeed(speed)
     
     @property

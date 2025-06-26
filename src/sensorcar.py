@@ -6,7 +6,8 @@ import time
 import util.json_loader as loader
 import json
 
-class SensorCar(BaseCar):
+
+class SensorCar(SonicCar):
     '''
     Die Klasse SensorCar verfolgt mit Hilfe von Infrarot-Sensoren eine schwarze Linie auf dem Boden. 
 
@@ -16,10 +17,9 @@ class SensorCar(BaseCar):
         follow_line_digital - nutzt zur Auswertung die digitalen Werte des Infrarot-Sensors
 
     '''
-    def __init__(self, steering_angle = 90, speed = 0, direction = 0):
-        super().__init__(steering_angle, speed, direction)
+    def __init__(self, steering_angle = 90, speed = 0):
+        super().__init__(steering_angle, speed)
         self.__irm = Infrared()
-        self.__usm = SonicCar()
         cfg = loader.readjson("/home/pi/Documents/git/c2c_project_1/src/config/car_hardware_config.json")
         self.__irm.set_references(ref=cfg["infrared_reference"]) # setzen der Referenzwerte aus der Hareware-Config
 
@@ -57,12 +57,12 @@ class SensorCar(BaseCar):
         reference_list = [round(numpy.mean(sumlist)/len(data)*0.8,1) for _ in range(len(data))]  # erzeugen der neuen Referenzliste
         self.__irm.set_references(reference_list)
         # alte Hardware-Config lesen
-        with open("/home/pi/Documents/git/c2c_project_1/src/config/car_hardware_config.json", "r") as f:
+        with open("src/config/car_hardware_config.json", "r") as f:
                 data = json.load(f)
 
         data["infrared_reference"] = reference_list
         # neue Referenzliste in die Hardware-Config schreiben
-        with open("/home/pi/Documents/git/c2c_project_1/src/config/car_hardware_config.json", "w") as f:
+        with open("src/config/car_hardware_config.json", "w") as f:
             json.dump(data, f, indent= 2) 
 
 
@@ -74,7 +74,7 @@ class SensorCar(BaseCar):
         while True:
             data = self.__irm.read_digital()
             print(data)
-            distance = self.__usm.get_distance() # Überprüfen der Distanz zu einem Hindernis
+            distance = self.get_distance() # Überprüfen der Distanz zu einem Hindernis
             if numpy.sum(data) > 2  or distance < 20 : # Abbruchbedingungen
                 print(data)
                 print(distance)
@@ -92,6 +92,6 @@ if __name__ == "__main__":
     car = SensorCar()
     #car.test_infrared(10)
     #car.follow_line_analog(60)
-    car.reference_ground()
-    #car.follow_line_digital(60)
+    #car.reference_ground()
+    car.follow_line_digital(60)
     #car.stop()
