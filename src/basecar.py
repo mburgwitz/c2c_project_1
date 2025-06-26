@@ -27,7 +27,8 @@ class BaseCar:
     #Standardkonstruktor der Klasse, da alle Parmetern vordefinierten Werte haben.
     def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
 
-        cfg = loader.readjson("/home/pi/Desktop/git/c2c_project_1/src/config/car_hardware_config.json")
+    #    cfg = loader.readjson("/home/pi/Desktop/git/c2c_project_1/src/config/car_hardware_config.json")
+        cfg = loader.readjson("/home/pi/Clean_/c2c_project_1/src/config/car_hardware_config.json")
 
         self.__steering_angle = steering_angle
         self.__speed = speed
