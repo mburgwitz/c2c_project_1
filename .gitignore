@@ -1,4 +1,5 @@
 fahrt_log.json
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

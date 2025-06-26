@@ -27,6 +27,7 @@ class BaseCar:
     #Standardkonstruktor der Klasse, da alle Parmetern vordefinierten Werte haben.
     def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
 
+        cfg = loader.readjson("src/config/car_hardware_config.json")
     #    cfg = loader.readjson("/home/pi/Desktop/git/c2c_project_1/src/config/car_hardware_config.json")
         cfg = loader.readjson("/home/pi/Clean_/c2c_project_1/src/config/car_hardware_config.json")
 
@@ -60,12 +61,12 @@ class BaseCar:
     #Property auf Privat-Attribut __speed, Aufruf und Setzen erlaubt
     @property
     def speed(self):
-        print(f"get speed: {self.__speed}")
+        #print(f"get speed: {self.__speed}")
         return self.__speed
     
     @speed.setter
     def speed(self, speed: int):
-        print(f"set speed: {speed}")
+        #print(f"set speed: {speed}")
         self.__speed = self.__checkSpeed(speed)
     
     @property
