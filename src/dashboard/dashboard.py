@@ -8,9 +8,8 @@ import time
 
 from threading import Thread, Lock
 from sensorcar import SensorCar
-from util.json_loader import readjson
+from util.json_loader import readjson, save_log_to_file
 import pandas as pd
-from test_modi import save_log_to_file
 import os
 
 # PYTHONPATH=src python3 src/dashboard/dashboard.py
@@ -112,6 +111,8 @@ def car_process(menu_selection: str):
             car.explore()
         elif menu_selection == "DriveMode 4b":
             car.random_drive(False)
+        elif menu_selection == "DriveMode 5-7":
+            car.follow_line_digital(50,20)
         else:
             car_thread_running = False
     except Exception as e:

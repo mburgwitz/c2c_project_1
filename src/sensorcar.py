@@ -28,14 +28,16 @@ class SensorCar(SonicCar):
         Erweitert die Protokollierung um die Daten des Ultraschall- und Infrarotsensors.
         Diese Methode wird bei jeder Aktion (drive, stop) aufgerufen.
         '''
+        line_status_raw = self.get_line_status()
+        line_status_clean = [int(x) for x in line_status_raw]
         status_record = {
             "timestamp": time.time(),
             "speed": self.speed,
             "steering_angle": self.steering_angle,
             "direction": self.direction,
             "distance_cm": self.get_distance(),
-            "line_sensors": self.get_line_status()
-        }
+            "line_sensors": line_status_clean}
+        
         self.log.append(status_record)
         # print(status_record) # Für Echtzeit-Debugging einkommentieren
 
@@ -118,5 +120,6 @@ if __name__ == "__main__":
     #car.test_infrared(10)
     #car.follow_line_analog(60)
     #car.reference_ground()
-    car.follow_line_digital(60)
-    #car.stop()
+    #car.fahrmodus1(30, 5)
+    #car.follow_line_digital(60)
+    car.stop()

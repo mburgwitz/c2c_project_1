@@ -25,7 +25,7 @@ class BaseCar:
     MIN_SPEED = -100
 
     #Standardkonstruktor der Klasse, da alle Parmetern vordefinierten Werte haben.
-    def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
+    def __init__(self, steering_angle: int = 90, speed: int = 0, direction: int = 0):
 
         cfg = loader.readjson("src/config/car_hardware_config.json")
 
@@ -33,7 +33,7 @@ class BaseCar:
         self.__speed = speed
         self.__direction = direction  
 
-        self.__fw = FrontWheels(cfg["turning_offset"])
+        self.__fw = FrontWheels(cfg["turning_offset"]) 
         self.__bw = BackWheels(cfg["forward_A"], cfg["forward_B"])      
 
         # Initialisierung der Datenaufzeichnung
