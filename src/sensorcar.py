@@ -23,7 +23,33 @@ class SensorCar(SonicCar):
         cfg = loader.readjson("src/config/car_hardware_config.json")
         self.__irm.set_references(ref=cfg["infrared_reference"]) # setzen der Referenzwerte aus der Hareware-Config
 
+    def _log_status(self):
+        '''
+        Erweitert die Protokollierung um die Daten des Ultraschall- und Infrarotsensors.
+        Diese Methode wird bei jeder Aktion (drive, stop) aufgerufen.
+        '''
+        status_record = {
+            "timestamp": time.time(),
+            "speed": self.speed,
+            "steering_angle": self.steering_angle,
+            "direction": self.direction,
+            "distance_cm": self.get_distance(),
+            "line_sensors": self.get_line_status()
+        }
+        self.log.append(status_record)
+        # print(status_record) # Für Echtzeit-Debugging einkommentieren
 
+    def get_line_status(self) -> list:
+        '''
+        Liest die digitalen Werte der 5 Infrarotsensoren.
+        Eine '1' bedeutet, der Sensor erkennt die Linie.
+        Eine '0' bedeutet, der Sensor erkennt den Hintergrund.
+
+        Returns:
+            list: Eine Liste mit 5 Elementen (0 oder 1), z.B. [0, 0, 1, 0, 0].
+        '''
+        return self.__irm.read_digital()
+    
     def follow_line_analog(self,geschwindigkeit: int= 30):
         '''
         Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
@@ -65,18 +91,18 @@ class SensorCar(SonicCar):
             json.dump(data, f, indent= 2) 
 
 
-    def follow_line_digital(self,geschwindigkeit: int= 30):
+    def follow_line_digital(self,geschwindigkeit: int= 30, stop_distance: int = 20):
         '''
         Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
         Die Mehtode wertet auch den Abstand aus, bei einem Hindernis wird die Fahrt gestoppt. 
         '''
         while True:
             data = self.__irm.read_digital()
-            print(data)
+            #print(data)
             distance = self.get_distance() # Überprüfen der Distanz zu einem Hindernis
-            if numpy.sum(data) > 2  or distance < 20 : # Abbruchbedingungen
-                print(data)
-                print(distance)
+            if numpy.sum(data) > 2  or distance < stop_distance : # Abbruchbedingungen
+                #print(data)
+                #print(distance)
                 break
             # Lenkwinkelbedingungen
             elif data == [1,0,0,0,0]: self.drive(speed=geschwindigkeit*0.6, angle=45)
