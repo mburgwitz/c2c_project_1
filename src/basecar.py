@@ -9,6 +9,8 @@ from basisklassen import FrontWheels, BackWheels
 import time
 import util.json_loader as loader
 
+from threading import Event
+
 class BaseCar:
     '''
     BaseCar Klasse ist die Klasse mit den Grundfahrfunktionen des Fahrzeuges.
@@ -55,6 +57,14 @@ class BaseCar:
         # Initialisierung der Datenaufzeichnung
         self.log = []
 
+        # Flag, ob ein Fahrprozess gerade läuft
+        # wird von Fahrprozessen abgefragt, wird beim Start eines Fahrmodus True gesetzt
+        self._running = False
+
+        # fancy time.sleep
+        # nutzt Event.wait, unterbrechung mit .set()
+        self._stop_event = Event()
+
     #Property auf Privat-Attribut __steering_angle, Aufruf und Setzen erlaubt
 >>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
     @property
@@ -75,10 +85,12 @@ class BaseCar:
 >>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
     @property
     def speed(self):
+        print(f"get speed: {self.__speed}")
         return self.__speed
     
     @speed.setter
     def speed(self, speed: int):
+        print(f"set speed: {speed}")
         self.__speed = self.__checkSpeed(speed)
     
     @property
@@ -108,18 +120,12 @@ class BaseCar:
             return self.MAX_SPEED
         return speed
     
-<<<<<<< HEAD
-    def drive(self, speed: int = None, angle: float = None):
-        if angle is not None:
-            self.steering_angle = angle
-        if speed is not None:
-            self.speed = speed
+    def checkSteeringAngle(self, angle: int) -> int:
+        return self.__checkSteeringAngle(angle)
 
-        if self.speed > 0:
-            self.__bw.forward()
-            self.__direction = 1
-        elif self.speed < 0:
-=======
+    def checkSpeed(self, speed: int) -> int:
+        return self.__checkSpeed(speed)
+    
     def _log_status(self):
         '''
         Private Methode, um den aktuellen Status des Fahrzeugs zu protokollieren.
@@ -217,6 +223,12 @@ class BaseCar:
         #Klassen-Interne Richtung auf 0 setzen.
         self.__direction = 0
 
+    def hard_stop(self):
+        """ Unterbricht zusätzlich loops und timer
+        """
+        self.stop()
+        self._stop_event.set()
+        self._running = False
 
     def fahrmodus1(self, geschwindigkeit: int, fahrzeit: float):
         """fahrmodus1 
@@ -228,13 +240,24 @@ class BaseCar:
         fahrzeit : float
             Gesamtfahrzeit des Fahrzeugs
         """
+        self._running = True
+        self._stop_event.clear()
+
         self.drive(speed = geschwindigkeit, angle = 90)
         self._log_status()
-        time.sleep(fahrzeit/2)
 
+        if self._stop_event.wait(timeout=fahrzeit/2):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
+            
         self.drive(speed = geschwindigkeit *-1, angle = 90)
         self._log_status()
-        time.sleep(fahrzeit/2)
+
+        if self._stop_event.wait(timeout=fahrzeit/2):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
         
         self.stop()
         self._log_status()
@@ -251,21 +274,40 @@ class BaseCar:
         lenkwinkel : float
             Lenkwinkel für die Kreisfahrt
         """
+        self._running = True
+        self._stop_event.clear()
+
         self.drive(speed = geschwindigkeit, angle = 90)
         self._log_status()
-        time.sleep(1)
+        
+        if self._stop_event.wait(timeout=1):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit, angle = lenkwinkel)
         self._log_status()
-        time.sleep(8)
+        
+        if self._stop_event.wait(timeout=8):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit *-1, angle = lenkwinkel)
         self._log_status()
-        time.sleep(8)
+        
+        if self._stop_event.wait(timeout=8):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit *-1, angle = 90)
         self._log_status()
-        time.sleep(1)
+        
+        if self._stop_event.wait(timeout=1):
+            self.log.info(f"route manually terminated")
+            self._running = False
+            return
 
         self.stop()
         self._log_status()
@@ -275,53 +317,5 @@ class BaseCar:
 
 if __name__ == '__main__':
     car = BaseCar()
-<<<<<<< HEAD
-
-    # Fahrmodus 1
-    #car.fahrmodus1(30, 5)
-    # car.drive(speed = 30)
-    # time.sleep(3)
-    
-    # car.stop()
-    # time.sleep(1)
-
-    # car.drive(speed = -30)
-    # time.sleep(3)
-
-    # car.stop()
-
-
-    # time.sleep(3)
-
-    # Fahrmodus 2
-    car.fahrmodus2(30, 135)
-    car.fahrmodus2(30, 45)
-    # car.drive(speed = 30, angle= 90)
-    # time.sleep(1)
-    
-    # car.drive(speed = 30, angle = 135)
-    # time.sleep(8)
-
-    # car.drive(speed= -30, angle = 135)
-    # time.sleep(8)
-
-    # car.drive(speed = -30, angle= 90)
-    # time.sleep(1)
-
-    # car.stop()
-    
-=======
-    #car.steering_angle = 10
-    #Fahren
-    car.drive(30, 90)
-    #Für 2s erlauben, dass Fahrzeug fährt
-    time.sleep(2)
-    # Fahrzeug anhalten
-    car.stop()
-    # Rueckwaerts fahren, um 45Grad Lenken
-    car.drive(-30, 45)
-    time.sleep(2)
-    # Fahrzeug anhalten durch speed=0
-    car.drive(0, 90)
-    car.stop()
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
+    car.fahrmodus1(30,45)
+   
