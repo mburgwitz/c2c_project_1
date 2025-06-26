@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-from basisklassen import FrontWheels, BackWheels # Man könnte auch alles importieren, aber in diesem Fall sind nur Front/BackWheels erforderlich, dann wird der gesamte Code ausgeführt
-import time
-
-class BaseCar:
-
-=======
 from basisklassen import FrontWheels, BackWheels
 import time
 import util.json_loader as loader
@@ -25,23 +18,12 @@ class BaseCar:
         
     '''
     #Definition von Konstanten(alles Groß geschrieben) mit nicht mehr veränderbaren Werten
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
     MAX_STEERING_ANGLE = 135
     MIN_STEERING_ANGLE = 45
 
     MAX_SPEED = 100
     MIN_SPEED = -100
 
-<<<<<<< HEAD
-    def __init__(self, steering_angle: float = 90.0, speed: float = 0.0, direction: int = 0):
-    # Self als eigene Instanz innerhalb der Klasse BaseCar (Privat)
-        self.__steering_angle = steering_angle
-        self.__speed = speed
-        self.__direction = direction  
-        self.__fw = FrontWheels()
-        self.__bw = BackWheels()      
-
-=======
     #Standardkonstruktor der Klasse, da alle Parmetern vordefinierten Werte haben.
     def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
 
@@ -66,23 +48,15 @@ class BaseCar:
         self._stop_event = Event()
 
     #Property auf Privat-Attribut __steering_angle, Aufruf und Setzen erlaubt
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
     @property
     def steering_angle(self):
         return self.__steering_angle
     
-<<<<<<< HEAD
-    @steering_angle.setter
-    def steering_angle(self, new_angle: float):
-        self.__steering_angle = self.__checkSteeringAngle(new_angle)
-    
-=======
     #Ermöglicht das Setzen von __steering_angle
     @steering_angle.setter
     def steering_angle(self, new_angle: int):
         self.__steering_angle = self.__checkSteeringAngle(new_angle)
     #Property auf Privat-Attribut __speed, Aufruf und Setzen erlaubt
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
     @property
     def speed(self):
         print(f"get speed: {self.__speed}")
@@ -97,12 +71,8 @@ class BaseCar:
     def direction(self):
         return self.__direction
     
-<<<<<<< HEAD
-    def __checkSteeringAngle(self, angle: float) -> float:
-=======
     def __checkSteeringAngle(self, angle: int) -> int:
         #Sicherstellen, dass der Winkel im Gültigkeitsbereich bleibt
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
         if angle < self.MIN_STEERING_ANGLE: 
             return self.MIN_STEERING_ANGLE 
         elif angle > self.MAX_STEERING_ANGLE:
@@ -110,10 +80,7 @@ class BaseCar:
         return angle
     
     def __checkSpeed(self, speed: int) -> int:
-<<<<<<< HEAD
-=======
         #Sicherstellen, dass die Geschwindigkeit im Gültigkeitsbereich bleibt
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
         if speed < self.MIN_SPEED:
             return self.MIN_SPEED
         elif speed > self.MAX_SPEED:
@@ -169,39 +136,10 @@ class BaseCar:
             self.__bw.forward()
             self.__direction = 1
         elif self.__speed < 0:
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
             self.__bw.backward()
             self.__direction = -1
         else:
             self.stop()
-<<<<<<< HEAD
-
-        self.__fw.turn(self.steering_angle)
-        self.__bw.speed = abs(self.speed)        
-
-    def stop(self):
-        self.__bw.stop()
-        self.__direction = 0
-
-    def fahrmodus1(self, geschwindigkeit, fahrzeit):
-        self.drive(speed = geschwindigkeit, angle = 90)
-        time.sleep(fahrzeit/2)
-        self.drive(speed = geschwindigkeit *-1, angle = 90)
-        time.sleep(fahrzeit/2)
-        self.stop()
-
-    def fahrmodus2(self, geschwindigkeit, lenkwinkel):
-        self.drive(speed = geschwindigkeit, angle = 90)
-        time.sleep(1)
-        self.drive(speed = geschwindigkeit, angle = lenkwinkel)
-        time.sleep(8)
-        self.drive(speed = geschwindigkeit *-1, angle = lenkwinkel)
-        time.sleep(8)
-        self.drive(speed = geschwindigkeit *-1, angle = 90)
-        time.sleep(1)
-        self.stop()
-
-=======
         #Drehung vornehmen
         self.__fw.turn(self.__steering_angle)
         #Speed wieder positiv festlegen, da nur 0 bis 100 erlaubt für __bw.speed
@@ -312,7 +250,6 @@ class BaseCar:
         self.stop()
         self._log_status()
  
->>>>>>> 05477987e09cd11921bfbc4d70670fb5949830f0
 
 
 if __name__ == '__main__':
