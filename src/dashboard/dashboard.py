@@ -113,10 +113,12 @@ def car_process(menu_selection: str):
             car.follow_line_digital(50,20)
         else:
             car_thread_running = False
+            car.stop()
     except Exception as e:
         raise Exception(e)
     finally:
         car_thread_running = False
+        car.stop()
 
 #**********************************************
 # Layout components
