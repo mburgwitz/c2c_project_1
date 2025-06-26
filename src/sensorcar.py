@@ -57,7 +57,9 @@ class SensorCar(SonicCar):
         Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
         '''
         sumlist= []
-        while True:
+        self._stop_event.clear()
+        self._running = True
+        while(self._running):
             data = self.__irm.get_average()
             sumlist.append(round(numpy.sum(data),1))    # Aufbau der Summenliste zur Auswertung des Abbruchs
             # Bestimmung der Lenkwinkel
@@ -69,6 +71,7 @@ class SensorCar(SonicCar):
             # Abbruch Bedingungen
             if len(sumlist) >= 2 and sumlist[len(sumlist)-1]-(numpy.mean(sumlist)*0.1) > sumlist[len(sumlist)-2] : break
         self.stop()
+        self._running = False
 
     def reference_ground(self):
         '''
@@ -92,19 +95,21 @@ class SensorCar(SonicCar):
         with open("src/config/car_hardware_config.json", "w") as f:
             json.dump(data, f, indent= 2) 
 
+        print("reference_ground")
 
     def follow_line_digital(self,geschwindigkeit: int= 30, stop_distance: int = 20):
         '''
         Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
         Die Mehtode wertet auch den Abstand aus, bei einem Hindernis wird die Fahrt gestoppt. 
         '''
-        while True:
+        self._stop_event.clear()
+        self._running = True
+        while(self._running):
             data = self.__irm.read_digital()
-            #print(data)
             distance = self.get_distance() # Überprüfen der Distanz zu einem Hindernis
-            if numpy.sum(data) > 2  or distance < stop_distance : # Abbruchbedingungen
-                #print(data)
-                #print(distance)
+            if numpy.sum(data) > 2  or distance < stop_distance and self._running: # Abbruchbedingungen
+                self.stop()
+                self._running = False
                 break
             # Lenkwinkelbedingungen
             elif data == [1,0,0,0,0]: self.drive(speed=geschwindigkeit*0.6, angle=45)
@@ -112,9 +117,9 @@ class SensorCar(SonicCar):
             elif data == [0,0,1,0,0] or data == [0,0,0,0,0] : self.drive(speed=geschwindigkeit, angle=90)
             elif data == [0,0,0,1,1] or data == [0,0,0,1,0]: self.drive(speed=geschwindigkeit*0.8, angle=109)
             elif data == [0,0,0,0,1] : self.drive(speed=geschwindigkeit*0.6, angle=135)  
-        self.stop()
 
-
+            time.sleep(0.2)
+        
 if __name__ == "__main__":
     car = SensorCar()
     #car.test_infrared(10)

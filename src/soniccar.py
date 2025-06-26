@@ -81,15 +81,14 @@ class SonicCar(BaseCar):
         '''
         # Wichtig: Erst Geschwindigkeit im internen Zustand anpassen, dann stoppen
         super().stop()
-        self.__us.stop()  # Ultraschallsensor stoppen, falls nötig
         self._log_status()
+        self.__us.stop()  # Ultraschallsensor stoppen, falls nötig
 
     def hard_stop(self):
         """ Unterbricht zusätzlich loops und timer
         """
         super().hard_stop()
-        self.stop()
-        self._log_status()
+        self.__us.stop()
 
     # --- Implementierung der geforderten Fahrmodi ---
 
@@ -109,7 +108,7 @@ class SonicCar(BaseCar):
         self.drive(speed, 90)
         log_freq = 0.25  # Log-Frequenz in Sekunden
         last_log_time = 0
-        while True and self._running:
+        while self._running:
             dist = self.get_distance()
 
             # Loggen, um die Distanzänderung zu sehen

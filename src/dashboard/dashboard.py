@@ -70,12 +70,8 @@ def get_avaiable_logfiles():
 ]
 
 def write_to_logfile(log_name: str) -> None:
-    global log_menu_options
-    global log_choose_menu
     save_log_to_file(car.log, LOG_DIR / log_name)
-    log_menu_options = get_avaiable_logfiles()
-    log_choose_menu.children = log_menu_options
-
+  
 # DataFrame mit den Fahrdaten erstellen
 def reset_global_statistic_vars():
     global total_drive_time
@@ -113,16 +109,20 @@ def car_process(menu_selection: str):
             car.follow_line_digital(50,20)
         else:
             car_thread_running = False
-            car.stop()
+            car.hard_stop()
     except Exception as e:
         raise Exception(e)
     finally:
         car_thread_running = False
-        car.stop()
+        car.hard_stop()
+        
 
 #**********************************************
 # Layout components
 #**********************************************
+
+# dummy
+dummy_div = html.Div("", style={"display": "none"}, id="dummy_div")
 
 # title string
 header = dcc.Markdown('Pi:Car - Dashboard', className = "retro-header", id="header")
@@ -160,6 +160,8 @@ fig_1.update_xaxes(tickfont=dict(family='Rockwell', color="#0eecec", size=14))
 fig_1.update_yaxes(tickfont=dict(family='Rockwell', color='#0eecec', size=14))
 
 start_stop_button = dbc.Button("Start", id="start_stop_button")
+
+reference_ground_button = dbc.Button("Reference", id="reference_ground_button")
 
 car_poll_interval = dcc.Interval(id="car_poll_interval", interval=500, disabled=True)
 car_status_interval = dcc.Interval(id="car_status_interval", interval=250, disabled=True)
@@ -223,14 +225,15 @@ log_choose_menu = dbc.DropdownMenu(
                 id={"type": "dropdown-menu", "menu": "log_choose_menu"},
                 style={"position": "relative", "zIndex": 2000})
 
-load_file_button = dbc.Button("Load", id="load_file_button", className="mb-5")
-refresh_logs_button = dbc.Button("Refresh", id="refresh_logs_button", className="mb-5")
+load_file_button = dbc.Button("Load Log", id="load_file_button", className="mb-5")
+refresh_logs_button = dbc.Button("Refresh Logs", id="refresh_logs_button", className="mb-5")
 log_load_feedback = dcc.Markdown(' ', className = "log-load-feeback",id="log_load_feedback")
 
 #**********************************************
 # Layout
 #**********************************************
 app.layout = dbc.Container([
+        dummy_div,
         car_poll_interval,
         car_status_interval,
         loaded_data_store,
@@ -238,7 +241,8 @@ app.layout = dbc.Container([
 
             # --- HEADER AND MENU ---
             dbc.Row([
-                dbc.Col(header, width=10),
+                dbc.Col(header, width=8),
+                dbc.Col(reference_ground_button, width=2,className="d-flex align-items-end"),
                 dbc.Col([
                     drive_mode_menu,
                     html.Br(),
@@ -277,11 +281,6 @@ app.layout = dbc.Container([
                 dbc.Col([header_plot,
                         dcc.Graph(id='fig_1', figure=fig_1)], width=10),
                 
-            # ],align="center"),
-
-            
-                
-                
                 dbc.Col([
                         dbc.Col(graph_display_menu),
                         html.Div(header_log_load, style={'position':'relative','zIndex':1}),
@@ -310,6 +309,15 @@ app.layout = dbc.Container([
 #**********************************************
 # Callbacks
 #**********************************************
+
+@app.callback(
+    Output("dummy_div","children"),
+    Input("reference_ground_button", "n_clicks"),
+    prevent_initial_call=True 
+)
+def reference_ir_sensor(self):
+    car.reference_ground()
+    return no_update
 
 # Update menu with selected label
 @app.callback(
@@ -382,12 +390,12 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
                 return "Start", True, True # polling stays deactivated,
             
             if current_label == "Stop":
-                car.hard_stop()
                 car_thread_running = False
                 stop_time_driving = time.time()
                 write_to_logfile("log_"
                                  +str(time.strftime("%y%m%d_%H%M",  time.localtime(stop_time_driving)))
                                  +".json")
+                car.hard_stop()
                 return "Start", True, True # deactivate polling
             else:
                 Thread(target=car_process, args=(menu_selection,), daemon=True).start()
@@ -408,33 +416,64 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
     Output("clsC5TextId", "children"),
     Output('live_data_store', 'data'),
     Input("car_status_interval", "n_intervals"),
+    Input("load_file_button", "n_clicks"),
     State("start_stop_button", "children"),
+    State("loaded_data_store", "data"),
     prevent_initial_call=True 
 )
-def update_status_cards( n_intervals,current_label):
+def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
     global total_route
     global total_drive_time
-    
+
+    trigger_id = ctx.triggered_id
+
     # Nur updaten, wenn der Button gerade "Stop" anzeigt (also Drive läuft)
-    if current_label != "Stop":
+    # und keine log-daten geladen wurden
+    if current_label != "Stop" and trigger_id != "load_file_button":
         raise PreventUpdate
     
-    with car_lock:
-        velocity.append(car.speed)
-        steering_angle.append(car.steering_angle)
-        direction.append(car.direction)
-    timestamps.append(time.time())
+    if trigger_id == "load_file_button":
+        print(loaded_data)
+        df = pd.DataFrame(loaded_data)
+        print("Spalten im DataFrame:", df.columns)
+        
+        df["cum_delta_t"] = df["timestamp"] - df["timestamp"].iloc[0]
+        df["dt_s"] = df["timestamp"].diff().fillna(0) 
+        df['Route'] = ((df["speed"] + df["speed"].shift(fill_value=0)) * df["dt_s"] / 2).cumsum()
 
-    # just append values if we just started to drive
-    if car_thread_running == False:
-        return no_update, no_update, no_update, no_update, no_update, no_update
+        v_max = df["speed"].max()
+        v_min = df["speed"].min()
+        v_avg = df["speed"].mean()
+        total_route = df['Route'].max()
+        total_drive_time = df["timestamp"].iloc[-1] - df["timestamp"].iloc[0]
+        return (
+            f"{v_max:.2f}",
+            f"{v_min:.2f}",
+            f"{v_avg:.2f}",
+            f"{total_route:.2f}",
+            f"{total_drive_time:.2f}",
+            no_update
+        )
+
+    else:     
+        with car_lock:
+            velocity.append(car.speed)
+            steering_angle.append(car.steering_angle)
+            direction.append(car.direction)
+        timestamps.append(time.time())
+
+        # just append values if we just started to drive
+        if car_thread_running == False:
+            return no_update, no_update, no_update, no_update, no_update, no_update
 
     # only calculate if we have at least 2 values and started the process already
     if len(velocity) < 2:
         return "-", "-", "-", "-", "-", no_update
 
     # Basiszeit rechnen
+  
     elapsed = time.time() - start_time_driving
+
     total_drive_time = elapsed
 
     # avg velocity between now and last timestamp times delta_t
@@ -495,22 +534,35 @@ def load_file(n_clicks, filename):
     Input("load_file_button", "n_clicks"),
     Input("live_data_store", "data"),
     Input({"type": "dropdown-menu", "menu": "graph_display_menu"}, "label"),
+    Input({"type": "dropdown-item", "menu": "graph_display_menu", "index": ALL}, "n_clicks"),
     State("loaded_data_store", "data"),
     State("fig_1", "figure"),            
     prevent_initial_call=True
 )
-def update_graph(n_click, data_live, selected_metric, data_loaded, fig ):
+def update_graph(n_click, data_live, selected_metric, selected_item, data_loaded, fig ):
     # Erstelle eine Liniengrafik mit Plotly Express
 
     trigger_id = ctx.triggered_id
     
+    if not data_loaded and not data_live:
+        print("no data live or loaded")
+        raise PreventUpdate
+
     if not data_loaded and (trigger_id == "loaded_data_store" or trigger_id == "load_file_button"):
+         print("no data loaded")
          raise PreventUpdate
     
-    if trigger_id not in ("load_file_button", "live_data_store"):
+    if (trigger_id != "load_file_button" and trigger_id != "live_data_store" and not (
+            isinstance(trigger_id, dict)
+            and trigger_id.get("type") == "dropdown-item"
+            and trigger_id.get("menu") == "graph_display_menu")):
+        print("no valid trigger")
         raise PreventUpdate
-    
-    data = data_loaded if (trigger_id == "loaded_data_store" or trigger_id == "load_file_button") else data_live
+
+    if trigger_id == "live_data_store":
+        data = data_live
+    else:
+        data = data_loaded if data_loaded else data_live
     
     df = pd.DataFrame(data)
 

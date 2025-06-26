@@ -185,7 +185,6 @@ class BaseCar:
         self._log_status()
 
         if self._stop_event.wait(timeout=fahrzeit/2):
-            self.log.info(f"route manually terminated")
             self._running = False
             return
             
@@ -193,7 +192,6 @@ class BaseCar:
         self._log_status()
 
         if self._stop_event.wait(timeout=fahrzeit/2):
-            self.log.info(f"route manually terminated")
             self._running = False
             return
         
@@ -219,7 +217,6 @@ class BaseCar:
         self._log_status()
         
         if self._stop_event.wait(timeout=1):
-            self.log.info(f"route manually terminated")
             self._running = False
             return
 
@@ -227,7 +224,6 @@ class BaseCar:
         self._log_status()
         
         if self._stop_event.wait(timeout=8):
-            self.log.info(f"route manually terminated")
             self._running = False
             return
 
@@ -235,7 +231,6 @@ class BaseCar:
         self._log_status()
         
         if self._stop_event.wait(timeout=8):
-            self.log.info(f"route manually terminated")
             self._running = False
             return
 
@@ -243,7 +238,6 @@ class BaseCar:
         self._log_status()
         
         if self._stop_event.wait(timeout=1):
-            self.log.info(f"route manually terminated")
             self._running = False
             return
 
