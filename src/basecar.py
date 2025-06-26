@@ -87,6 +87,12 @@ class BaseCar:
             return self.MAX_SPEED
         return speed
     
+    def checkSteeringAngle(self, angle: int) -> int:
+        return self.__checkSteeringAngle(angle)
+
+    def checkSpeed(self, speed: int) -> int:
+        return self.__checkSpeed(speed)
+    
     def _log_status(self):
         '''
         Private Methode, um den aktuellen Status des Fahrzeugs zu protokollieren.
@@ -248,5 +254,5 @@ class BaseCar:
 
 if __name__ == '__main__':
     car = BaseCar()
-    car.fahrmodus2(30,45)
+    car.fahrmodus1(30,45)
    
