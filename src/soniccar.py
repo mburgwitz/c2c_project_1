@@ -31,11 +31,8 @@ class SonicCar(BaseCar):
         super().__init__(steering_angle, speed)
 
         # Instanziierung des Ultraschallsensors
-        self.__us = Ultrasonic()
-        
-        
-        
-        print("SonicCar wurde initialisiert.")
+        self.__us = Ultrasonic()    
+        #print("SonicCar wurde initialisiert.")
 
     def get_distance(self) -> int:
         '''
@@ -92,6 +89,7 @@ class SonicCar(BaseCar):
         """
         super().hard_stop()
         self.stop()
+        self._log_status()
 
     # --- Implementierung der geforderten Fahrmodi ---
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 
 from threading import Thread, Lock
-from soniccar import SonicCar
+from sensorcar import SensorCar
 from util.json_loader import readjson
 import pandas as pd
 from test_modi import save_log_to_file
@@ -33,7 +33,7 @@ index_string = index_template.replace("{{retro_background}}", retro_html)
 #**********************************************
 # Main App and objects
 #**********************************************
-car = SonicCar()
+car = SensorCar()
 car_thread_running = False
 car_lock = Lock()
 
@@ -177,6 +177,9 @@ drive_menu_options = [
     dbc.DropdownMenuItem("DriveMode 4b", id={"type": "dropdown-item", 
                                             "menu": "drive_mode_menu",
                                             "index": 4}),
+    dbc.DropdownMenuItem("DriveMode 5-7", id={"type": "dropdown-item", 
+                                            "menu": "drive_mode_menu",
+                                            "index": 5}),
 ]
 drive_mode_menu = dbc.DropdownMenu(
                 label="Modes",
