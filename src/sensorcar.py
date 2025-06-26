@@ -55,7 +55,6 @@ class SensorCar(SonicCar):
             data = self.__irm.get_average()
             sumlist.append(round(numpy.sum(data),1)) # Aufbau der Summenliste
         reference_list = [round(numpy.mean(sumlist)/len(data)*0.8,1) for _ in range(len(data))]  # erzeugen der neuen Referenzliste
-        self.__irm.set_references(reference_list)
         # alte Hardware-Config lesen
         with open("src/config/car_hardware_config.json", "r") as f:
                 data = json.load(f)
