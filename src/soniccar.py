@@ -2,7 +2,7 @@ from basecar import BaseCar
 from basisklassen import Ultrasonic
 import time
 import random
-
+from random import normalvariate, randrange
 class SonicCar(BaseCar):
     '''
     Die SonicCar-Klasse erweitert die BaseCar-Klasse um die Funktionalität eines Ultraschallsensors.
@@ -87,6 +87,12 @@ class SonicCar(BaseCar):
         self.__us.stop()  # Ultraschallsensor stoppen, falls nötig
         self._log_status()
 
+    def hard_stop(self):
+        """ Unterbricht zusätzlich loops und timer
+        """
+        super().hard_stop()
+        self.stop()
+
     # --- Implementierung der geforderten Fahrmodi ---
 
     def drive_until_obstacle(self, speed: int = 30, stop_distance: int = 20):
@@ -154,7 +160,7 @@ class SonicCar(BaseCar):
             print("Hindernis erkannt! Starte Ausweichmanöver.")
             self.stop()
             if self._stop_event.wait(timeout=0.5):
-                self.log.info(f"route manually terminated")
+                print(f"route manually terminated")
                 self._running = False
                 return
 
@@ -163,13 +169,13 @@ class SonicCar(BaseCar):
             self.drive(-speed, 90) # Rückwärts gerade
             
             if self._stop_event.wait(timeout=1):
-                self.log.info(f"route manually terminated")
+                print(f"route manually terminated")
                 self._running = False
                 return
                 
             self.stop()
             if self._stop_event.wait(timeout=0.5):
-                self.log.info(f"route manually terminated")
+                print(f"route manually terminated")
                 self._running = False
                 return
 
@@ -178,19 +184,107 @@ class SonicCar(BaseCar):
             turn_angle = random.choice([self.MIN_STEERING_ANGLE, self.MAX_STEERING_ANGLE])
             self.drive(speed, turn_angle) # 0 Räder im Stand drehen-> aus erfahrung bewege ich mich doch
             if self._stop_event.wait(timeout=1):
-                self.log.info(f"route manually terminated")
+                print(f"route manually terminated")
                 self._running = False
                 return
             
             # Räder wieder gerade stellen, um für die nächste Runde bereit zu sein
             self.drive(speed, 90)
             if self._stop_event.wait(timeout=0.5):
-                self.log.info(f"route manually terminated")
+                print(f"route manually terminated")
                 self._running = False
                 return
 
         print("Erkundungstour beendet.")
         self.stop()
+
+    def random_drive(self, stop_at_obstacle: bool = True, stop_distance: int = 25,
+                     normal_speed: int = 30, drive_time: int =20,
+                     min_speed: int = 30, max_speed: int = 60):
+
+        try:
+
+            start_exploration_time = time.time()
+
+            self._running = True
+            while(self._running):
+                start_time = time.time()
+
+                self.speed = normal_speed
+
+                delta_angle = round(normalvariate(0,20))
+                self.steering_angle = self.checkSteeringAngle(self.steering_angle + delta_angle)
+
+                #delta_speed = randrange(-10,10,5)
+                delta_speed = round(normalvariate(0,10))
+                tmp_speed = self.speed + delta_speed
+
+                if tmp_speed < min_speed:
+                    tmp_speed = min_speed 
+                elif tmp_speed > max_speed:
+                    tmp_speed = max_speed 
+
+                self.speed = self.checkSpeed(tmp_speed)
+                
+                time_for_section = randrange(1,3)
+
+                self.drive(speed=self.speed, angle = self.steering_angle)
+                
+                t_delta = time.time() - start_time
+
+                while (t_delta < time_for_section) and self._running:
+                    time.sleep(0.25)
+                    t_delta = time.time() - start_time
+
+                    distance = self.get_distance()
+
+                    self._log_status()
+
+                    if distance < stop_distance:
+                        if stop_at_obstacle:
+                            self.stop()
+                            self._running = False
+                            break
+                        else:
+                            self.evade_obstacle()
+                
+                if time.time() - start_exploration_time > drive_time:
+                    self._running = False
+                    print(f"drive time limit of {drive_time} seconds reached")
+
+        except Exception as e:
+            print(f"{e}")
+        finally:
+            self.stop()
+
+    def evade_obstacle(self) -> None:
+        prev_speed = self.speed
+        prev_angle = self.steering_angle
+
+        tmp_angle = self.steering_angle
+        if tmp_angle > 90:
+            tmp_angle = self.MIN_STEERING_ANGLE
+        else:
+            tmp_angle = self.MAX_STEERING_ANGLE
+
+        tmp_speed = -30
+        tmp_time = 2
+
+        self.drive(speed=tmp_speed, angle= tmp_angle)
+
+        start_time = time.time()
+        t_delta = time.time() - start_time
+
+        self._running = True
+        while (t_delta < tmp_time) and self._running:
+            time.sleep(0.25)
+            t_delta = time.time() - start_time
+
+            distance = self.get_distance()
+            self._log_status()
+
+        self.speed = prev_speed 
+        self.steering_angle = prev_angle 
 
 if __name__ == "__main__":
 
