@@ -20,7 +20,7 @@ class SensorCar(SonicCar):
     def __init__(self, steering_angle = 90, speed = 0):
         super().__init__(steering_angle, speed)
         self.__irm = Infrared()
-        cfg = loader.readjson("/home/pi/Documents/git/c2c_project_1/src/config/car_hardware_config.json")
+        cfg = loader.readjson("src/config/car_hardware_config.json")
         self.__irm.set_references(ref=cfg["infrared_reference"]) # setzen der Referenzwerte aus der Hareware-Config
 
 
