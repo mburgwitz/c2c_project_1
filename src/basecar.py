@@ -254,6 +254,6 @@ class BaseCar:
 
 if __name__ == '__main__':
     car = BaseCar()
-    car.fahrmodus1(-30,5)
+    #car.fahrmodus1(-30,5)
     #car.stop()
    

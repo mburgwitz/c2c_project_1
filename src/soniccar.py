@@ -88,8 +88,7 @@ class SonicCar(BaseCar):
         """ Unterbricht zusätzlich loops und timer
         """
         super().hard_stop()
-        self.stop()
-        self._log_status()
+        self.__us.stop()  # Ultraschallsensor stoppen, falls nötig
 
     # --- Implementierung der geforderten Fahrmodi ---
 

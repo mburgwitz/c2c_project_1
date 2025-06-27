@@ -90,7 +90,7 @@ class SensorCar(SonicCar):
         data["infrared_reference"] = reference_list
         # neue Referenzliste in die Hardware-Config schreiben
         with open("src/config/car_hardware_config.json", "w") as f:
-            json.dump(data, f, indent= 2) 
+            json.dump(data, f, indent= 7) 
 
 
     def follow_line_digital(self,geschwindigkeit: int= 30, stop_distance: int = 20):
@@ -98,7 +98,9 @@ class SensorCar(SonicCar):
         Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
         Die Mehtode wertet auch den Abstand aus, bei einem Hindernis wird die Fahrt gestoppt. 
         '''
-        while True:
+        self._stop_event.clear()
+        self._running = True
+        while self._running:
             data = self.__irm.read_digital()
             #print(data)
             distance = self.get_distance() # Überprüfen der Distanz zu einem Hindernis
@@ -119,7 +121,7 @@ if __name__ == "__main__":
     car = SensorCar()
     #car.test_infrared(10)
     #car.follow_line_analog(60)
-    #car.reference_ground()
+    car.reference_ground()
     #car.fahrmodus1(30, 5)
     #car.follow_line_digital(60)
     car.stop()
