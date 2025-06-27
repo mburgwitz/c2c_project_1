@@ -69,8 +69,16 @@ def get_available_logfiles():
     for idx, name in enumerate(sorted([f.name for f in Path(LOG_DIR).glob("*.json")]))
 ]
 
+def reset_car() -> None:
+    global car
+    global car_thread_running
+
+    car_thread_running = False
+    car = SensorCar()
+
 def write_to_logfile(log_name: str) -> None:
-    save_log_to_file(car.log, LOG_DIR / log_name)
+    global car
+    save_log_to_file(car.log, LOG_DIR / log_name) 
   
 # DataFrame mit den Fahrdaten erstellen
 def reset_global_statistic_vars():
@@ -110,6 +118,7 @@ def car_process(menu_selection: str):
         else:
             car_thread_running = False
             car.hard_stop()
+        
     except Exception as e:
         raise Exception(e)
     finally:
@@ -384,7 +393,7 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
                                  +str(time.strftime("%y%m%d_%H%M",  time.localtime(stop_time_driving)))
                                  +".json")
             print(f"car thread ende: {stop_time_driving}")
-            
+            reset_car()
             return "Start", True, True
         
         elif trigger_id == "start_stop_button":
@@ -398,6 +407,7 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
                                  +str(time.strftime("%y%m%d_%H%M",  time.localtime(stop_time_driving)))
                                  +".json")
                 car.hard_stop()
+                reset_car()
                 return "Start", True, True # deactivate polling
             else:
                 Thread(target=car_process, args=(menu_selection,), daemon=True).start()
@@ -435,17 +445,13 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
         raise PreventUpdate
     
     if trigger_id == "load_file_button":
-        #print(loaded_data)
+        if loaded_data is None:
+            print("no loaded data")
+            raise PreventUpdate
         df = pd.DataFrame(loaded_data)
-        #print("Spalten im DataFrame:", df.columns)
         
-        print(df["timestamp"])
-        print("***********************")
         df["cum_delta_t"] = df["timestamp"] - df["timestamp"].iloc[0]
-        print( df["cum_delta_t"])
-        print("***********************")
         df["dt_s"] = df["timestamp"].diff().fillna(0) 
-        print(df["dt_s"])
         df['Route'] = ((df["speed"] + df["speed"].shift(fill_value=0)) * df["dt_s"] / 2).cumsum()
 
         v_max = df["speed"].max()
@@ -454,15 +460,6 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
         total_route = df['Route'].max()
         total_drive_time = df["timestamp"].iloc[-1] - df["timestamp"].iloc[0]
 
-        # data = [
-        #     {
-        #         "timestamp": df["timestamp"].iloc[i],
-        #         "speed": df["speed"].iloc[i],
-        #         "steering_angle": df["steering_angle"].iloc[i],
-        #         "direction": df["direction"].iloc[i]
-        #     }
-        #     for i in range(len(velocity))
-        # ]
         return (
             f"{v_max:.2f}",
             f"{v_min:.2f}",
@@ -471,6 +468,7 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
             f"{total_drive_time:.2f}",
             no_update
         )
+
 
     else:     
         with car_lock:
@@ -488,7 +486,8 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
         return "-", "-", "-", "-", "-", no_update
 
     # Basiszeit rechnen
-  
+    print("status live data")
+
     elapsed = time.time() - start_time_driving
 
     total_drive_time = elapsed
@@ -549,14 +548,22 @@ def load_file(n_clicks, filename):
 @app.callback(
     Output("fig_1", "figure"),
     Input("load_file_button", "n_clicks"),
+    Input({"type": "dropdown-item", "menu": "graph_display_menu", "index": ALL}, "n_clicks"),
     Input("live_data_store", "data"),
     Input({"type": "dropdown-menu", "menu": "graph_display_menu"}, "label"),
-    Input({"type": "dropdown-item", "menu": "graph_display_menu", "index": ALL}, "n_clicks"),
     State("loaded_data_store", "data"),
-    State("fig_1", "figure"),            
+    State("fig_1", "figure"),     
+    State('loaded_data_store', 'modified_timestamp'),
+    State('live_data_store', 'modified_timestamp') ,      
     prevent_initial_call=True
 )
-def update_graph(n_click, data_live, selected_metric, selected_item, data_loaded, fig ):
+def update_graph(n1,n2, 
+                 data_live, 
+                 selected_metric, 
+                 data_loaded, 
+                 fig,
+                 time_loaded_data_modified,
+                 time_live_data_modified ):
     # Erstelle eine Liniengrafik mit Plotly Express
 
     trigger_id = ctx.triggered_id
@@ -575,13 +582,30 @@ def update_graph(n_click, data_live, selected_metric, selected_item, data_loaded
             and trigger_id.get("menu") == "graph_display_menu")):
         print("no valid trigger")
         raise PreventUpdate
-
-    if trigger_id == "live_data_store":
+    
+    # wurde die live data zuletzt modifiziert, zeige nur live data an
+    # ermöglicht umschalten der angezeigten Größen im Graph auf Basis 
+    # des aktuellsten Datensatzes (live oder loaded)
+    if data_loaded is not None and data_live is None:
+        data = data_loaded
+    elif data_live is not None and data_loaded is None:
+        data = data_live
+    elif trigger_id ==  "load_file_button":
+        data = data_loaded
+    elif time_live_data_modified > time_loaded_data_modified:
         data = data_live
     else:
-        data = data_loaded if data_loaded else data_live
+        data = data_loaded
+
+    # if trigger_id == "live_data_store":
+    #     data = data_live
+    # else:
+    #     data = data_loaded if data_loaded else data_live
     
     df = pd.DataFrame(data)
+    # print("*****************")
+    # print(df.columns)
+    # print(df.head(10))
 
     # Verstrichene Zeit seit ersten timestamp
     df["cum_delta_t"] = df["timestamp"] - df["timestamp"].iloc[0]
@@ -600,12 +624,15 @@ def update_graph(n_click, data_live, selected_metric, selected_item, data_loaded
 
     elif selected_metric == "Acceleration":
         # acc = (v_i - v_{i-1}) / delta_ti
-        df['Acceleration'] = df['speed'].diff().fillna(0) / df['dt_s']
+        df['Acceleration'] = (df['speed'].diff().fillna(0) / df['dt_s']).fillna(0)
         y_axis = 'Acceleration'
     
     fig["data"][0]["x"] = df['cum_delta_t'].tolist()
     fig["data"][0]["y"] = df[y_axis].tolist()
     fig["data"][0]["name"] = selected_metric
+
+    # print(df[y_axis].head())
+    # print(df.head(10))
     
     return fig
 

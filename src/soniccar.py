@@ -48,40 +48,12 @@ class SonicCar(BaseCar):
             return 999  # Fehlerwert als "freie Fahrt" interpretieren
         return distance
 
-    def _log_status(self):
-        '''
-        Private Methode, um den aktuellen Status des Fahrzeugs zu protokollieren.
-        Wird von den überschriebenen Methoden drive() und stop() aufgerufen.
-        '''
-        '''Diese Daten beschreiben den Status des Autos
-        (Geschwindigkeit, Fahrtrichtung, Lenkwinkel) und die Daten des Ultraschallsensors.
-        Die Aufzeichnung/Speicherung der Daten soll für jede Steueranwesiung geschehen und
-        somit die Fahr bzw. deren Steuerung protokolieren.'''
-        status_record = {
-            "timestamp": time.time(),
-            "speed": self.speed,
-            "steering_angle": self.steering_angle,
-            "direction": self.direction,
-            "distance_cm": self.get_distance()
-        }
-        self.log.append(status_record)
-        # Optional: Log-Ausgabe in der Konsole für Echtzeit-Debugging
-        # print(status_record)
-
-    def drive(self, speed: int = None, angle: int = None):
-        '''
-        Überschreibt die drive-Methode von BaseCar, um die Datenaufzeichnung hinzuzufügen.
-        '''
-        super().drive(speed, angle)
-        self._log_status()
-
     def stop(self):
         '''
         Überschreibt die stop-Methode von BaseCar, um die Datenaufzeichnung hinzuzufügen.
         '''
         # Wichtig: Erst Geschwindigkeit im internen Zustand anpassen, dann stoppen
         super().stop()
-        self._log_status()
         self.__us.stop()  # Ultraschallsensor stoppen, falls nötig
 
     def hard_stop(self):
@@ -112,11 +84,11 @@ class SonicCar(BaseCar):
             dist = self.get_distance()
 
             # Loggen, um die Distanzänderung zu sehen
-            act_time = time.time()
-            if act_time - last_log_time >= log_freq:
-                last_log_time = act_time
-                # Protokolliere den aktuellen Status  
-                self._log_status()
+            # act_time = time.time()
+            # if act_time - last_log_time >= log_freq:
+            #     last_log_time = act_time
+            #     # Protokolliere den aktuellen Status  
+            #     self._log_status()
             
             #self._log_status()
             
@@ -127,7 +99,7 @@ class SonicCar(BaseCar):
             
             time.sleep(0.25) # Kurze Pause, um CPU-Last zu reduzieren
 
-    def explore(self, speed: int = 30, stop_distance: int = 25, duration_s: int = 60):
+    def explore(self, speed: int = 30, stop_distance: int = 25, duration_s: int = 30):
         '''
         Fahrmodus 4: Fährt für eine bestimmte Dauer autonom und weicht Hindernissen aus.
 
@@ -207,10 +179,10 @@ class SonicCar(BaseCar):
             while(self._running):
                 start_time = time.time()
 
-                self.speed = normal_speed
+                #self.speed = normal_speed
 
                 delta_angle = round(normalvariate(0,20))
-                self.steering_angle = self.checkSteeringAngle(self.steering_angle + delta_angle)
+                tmp_angle = self.checkSteeringAngle(self.steering_angle + delta_angle)
 
                 #delta_speed = randrange(-10,10,5)
                 delta_speed = round(normalvariate(0,10))
@@ -220,12 +192,10 @@ class SonicCar(BaseCar):
                     tmp_speed = min_speed 
                 elif tmp_speed > max_speed:
                     tmp_speed = max_speed 
-
-                self.speed = self.checkSpeed(tmp_speed)
                 
                 time_for_section = randrange(1,3)
 
-                self.drive(speed=self.speed, angle = self.steering_angle)
+                self.drive(speed=self.checkSpeed(tmp_speed), angle = tmp_angle)
                 
                 t_delta = time.time() - start_time
 
@@ -235,7 +205,7 @@ class SonicCar(BaseCar):
 
                     distance = self.get_distance()
 
-                    self._log_status()
+                    #self._log_status()
 
                     if distance < stop_distance:
                         if stop_at_obstacle:
@@ -278,7 +248,7 @@ class SonicCar(BaseCar):
             t_delta = time.time() - start_time
 
             distance = self.get_distance()
-            self._log_status()
+            #self._log_status()
 
         self.speed = prev_speed 
         self.steering_angle = prev_angle 
