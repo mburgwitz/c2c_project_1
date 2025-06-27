@@ -59,7 +59,7 @@ app = dash.Dash(__name__,
 # Functions
 #**********************************************
 
-def get_avaiable_logfiles():
+def get_available_logfiles():
     return [ 
     dbc.DropdownMenuItem(
         name,
@@ -216,7 +216,7 @@ graph_display_menu = dbc.DropdownMenu(
                 id = {"type": "dropdown-menu", "menu": "graph_display_menu"},
                 style={"position": "relative", "zIndex": 2000})
 
-log_menu_options = get_avaiable_logfiles()
+log_menu_options = get_available_logfiles()
 
 log_choose_menu = dbc.DropdownMenu(
                 label="Choose Log",
@@ -350,7 +350,9 @@ def update_menu_label(n_clicks_list):
     prevent_initial_call=True
 )
 def refresh_log_menu(n):
-    return get_avaiable_logfiles()
+    global log_menu_options
+    log_menu_options = get_available_logfiles()
+    return get_available_logfiles()
 
 # Start button
 @app.callback(
@@ -433,12 +435,17 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
         raise PreventUpdate
     
     if trigger_id == "load_file_button":
-        print(loaded_data)
+        #print(loaded_data)
         df = pd.DataFrame(loaded_data)
-        print("Spalten im DataFrame:", df.columns)
+        #print("Spalten im DataFrame:", df.columns)
         
+        print(df["timestamp"])
+        print("***********************")
         df["cum_delta_t"] = df["timestamp"] - df["timestamp"].iloc[0]
+        print( df["cum_delta_t"])
+        print("***********************")
         df["dt_s"] = df["timestamp"].diff().fillna(0) 
+        print(df["dt_s"])
         df['Route'] = ((df["speed"] + df["speed"].shift(fill_value=0)) * df["dt_s"] / 2).cumsum()
 
         v_max = df["speed"].max()
@@ -446,6 +453,16 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
         v_avg = df["speed"].mean()
         total_route = df['Route'].max()
         total_drive_time = df["timestamp"].iloc[-1] - df["timestamp"].iloc[0]
+
+        # data = [
+        #     {
+        #         "timestamp": df["timestamp"].iloc[i],
+        #         "speed": df["speed"].iloc[i],
+        #         "steering_angle": df["steering_angle"].iloc[i],
+        #         "direction": df["direction"].iloc[i]
+        #     }
+        #     for i in range(len(velocity))
+        # ]
         return (
             f"{v_max:.2f}",
             f"{v_min:.2f}",
@@ -552,7 +569,7 @@ def update_graph(n_click, data_live, selected_metric, selected_item, data_loaded
          print("no data loaded")
          raise PreventUpdate
     
-    if (trigger_id != "load_file_button" and trigger_id != "live_data_store" and not (
+    if (trigger_id != "load_file_button" and trigger_id != "live_data_store" and trigger_id != "loaded_data_store" and not (
             isinstance(trigger_id, dict)
             and trigger_id.get("type") == "dropdown-item"
             and trigger_id.get("menu") == "graph_display_menu")):
