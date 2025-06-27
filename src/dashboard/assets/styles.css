@@ -102,7 +102,7 @@ body {
     background-color: transparent !important;
     border: 2px solid #0eecec !important;
     color: hsl(180, 89%, 49%) !important;
-    box-shadow: 0 0 10px #0eecec;
+    box-shadow: 0 0 10px #00ffff, 0 0 10px #00ffff;
     font-weight: bold;
 
     min-height: 65px !important;
@@ -154,28 +154,74 @@ body {
   word-break: break-all !important;
 }
 
-/* upload module */
-.upload_data {
-  border: 2px solid #00ffff;
-  border-radius: 6px;
-  padding: 1.5rem;
-  background-color: rgba(0, 0, 0, 0.3);
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-  box-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
-
-  font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
-  color: #0ff;
-  letter-spacing: 2px;
-  white-space: pre-wrap;
+/* Popover  */
+/* Gesamt-Popover-Kasten */
+.popover {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: none !important;
+  box-shadow: 0 0 15px #0eecec !important;
+  color: #0eecec !important;
+  font-family: inherit !important;
+  letter-spacing: inherit !important;
+  min-width: 180px;
+  max-width: 180px;
 }
 
-.upload-data:hover {
-  background-color: rgba(0, 255, 255, 0.1);
-  box-shadow: 0 0 20px #00ffff, 0 0 30px #00ffff;
+/* Header */
+.popover .popover-header {
+  background-color: transparent !important;
+  border-bottom: none !important;
+  color: #0eecec !important;
+  text-shadow: 0 0 5px #0eecec !important;
 }
 
+/* Body */
+.popover .popover-body {
+  background-color: transparent !important;
+  padding: 1rem !important;
+}
+
+/* Jeder Floating-Input */
+.popover .form-floating {
+  margin-bottom: 0rem;
+}
+
+/* Die Input-Felder selbst */
+.popover .form-control {
+  background: transparent !important;
+  border: 2px solid #0eecec !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 10px #0eecec !important;
+  color: #0eecec !important;
+  font-family: inherit !important;
+  letter-spacing: inherit !important;
+  min-width: 180px;
+  max-width: 180px;
+}
+
+/* Floating-Label */
+.popover .form-floating > label {
+  color: #0eecec !important;
+  text-shadow: 0 0 5px #0eecec !important;
+  font-family: inherit !important;
+  letter-spacing: inherit !important;
+}
+
+/* Buttons im Popover (falls du welche nutzt) */
+.popover .btn {
+  background-color: transparent !important;
+  border: 2px solid #0eecec !important;
+  color: #0eecec !important;
+  box-shadow: 0 0 10px #0eecec, 0 0 20px #0eecec !important;
+  font-weight: bold !important;
+  font-family: inherit !important;
+  letter-spacing: inherit !important;
+}
+
+.popover .btn:hover {
+  background-color: rgba(14,236,236,0.1) !important;
+  box-shadow: 0 0 20px #0eecec, 0 0 30px #0eecec !important;
+}
 
 /* button styling */
 .btn {
@@ -187,11 +233,13 @@ body {
   border-radius: 6px;
   padding: 10px 20px;
   text-shadow: 0 0 5px #00ffff;
-  box-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+  box-shadow: 0 0 10px #00ffff, 0 0 10px #00ffff;
   transition: all 0.3s ease-in-out;
-
+  text-align: center;
   min-width: 185px !important;
   max-width: 185px !important;
+
+  max-height: 65px
 }
 
 .btn:hover {

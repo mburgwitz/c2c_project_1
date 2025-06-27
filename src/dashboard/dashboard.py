@@ -98,23 +98,27 @@ def reset_global_statistic_vars():
     total_route = []
 
 # worker process during car drive thread
-def car_process(menu_selection: str):
+def car_process(menu_selection: str,
+                input_speed, input_stop_dist, input_angle, input_time ):
     global car_thread_running
 
+    
     try:
         car_thread_running = True
         if menu_selection == "DriveMode 1":
-            car.fahrmodus1(30,4.0)
+            car.fahrmodus1(input_speed, input_time)
         elif menu_selection == "DriveMode 2":
-            car.fahrmodus2(30,45)
+            car.fahrmodus2(input_speed, input_angle)
         elif menu_selection == "DriveMode 3":
-            car.drive_until_obstacle()
+            car.drive_until_obstacle(input_speed, input_stop_dist)
         elif menu_selection == "DriveMode 4":
-            car.explore()
+            car.explore(input_speed, input_stop_dist, input_time)
         elif menu_selection == "DriveMode 4b":
-            car.random_drive(False)
+            car.random_drive(normal_speed=input_speed, 
+                             drive_time=input_time,
+                              stop_distance=input_stop_dist)
         elif menu_selection == "DriveMode 5-7":
-            car.follow_line_digital(50,20)
+            car.follow_line_digital(input_speed, input_stop_dist)
         else:
             car_thread_running = False
             car.hard_stop()
@@ -171,6 +175,51 @@ fig_1.update_yaxes(tickfont=dict(family='Rockwell', color='#0eecec', size=14))
 start_stop_button = dbc.Button("Start", id="start_stop_button")
 
 reference_ground_button = dbc.Button("Reference", id="reference_ground_button")
+
+set_init_values_button = dbc.Button("Set Initial Values", id="set_init_values_button")
+
+
+init_value_input_speed = dbc.Input(type="number", 
+                                   placeholder="Velocity", 
+                                   min=-100, max=100, step=1, 
+                                   id="input_speed",
+                                   value = 50)
+init_value_input_angle = dbc.Input(type="number", 
+                                   placeholder="Angle",
+                                   min=45, max=135, step=1, 
+                                   id="input_angle",
+                                   value=90)
+init_value_input_time = dbc.Input(type="number", 
+                                  placeholder="Duration",
+                                  min=0, step=0.5, 
+                                  id="input_time",
+                                  value=20)
+init_value_input_stop_dist = dbc.Input(type="number", 
+                                       placeholder="Stop Distance",
+                                       min=0, step=1, 
+                                       id="input_stop_dist",
+                                       value=20)
+
+# FormFloating kann nur ein Input und ein Label nutzen --> Pro Input ein FormFloating
+init_value_input_speed_form = dbc.FormFloating([init_value_input_speed, dbc.Label("Velocity")])
+init_value_input_angle_form = dbc.FormFloating([init_value_input_angle, dbc.Label("Angle")])
+init_value_input_time_form = dbc.FormFloating([init_value_input_time, dbc.Label("Duration")])
+init_value_input_stop_dist_form = dbc.FormFloating([init_value_input_stop_dist, dbc.Label("Stop Distance")])
+
+init_values_form = html.Div([init_value_input_speed_form,
+                             init_value_input_angle_form,
+                             init_value_input_time_form,
+                             init_value_input_stop_dist_form
+                            ])
+
+inital_values_popover = dbc.Popover([dbc.PopoverHeader("Inital Values Drive Mode",className="popover_title"),
+                                     init_values_form #dbc.PopoverBody("text",className="popover_body")
+                                     ], 
+                                     target="set_init_values_button",
+                                     trigger="click",
+                                     placement="bottom")
+
+
 
 car_poll_interval = dcc.Interval(id="car_poll_interval", interval=500, disabled=True)
 car_status_interval = dcc.Interval(id="car_status_interval", interval=250, disabled=True)
@@ -251,16 +300,33 @@ app.layout = dbc.Container([
             # --- HEADER AND MENU ---
             dbc.Row([
                 dbc.Col(header, width=8),
-                dbc.Col(reference_ground_button, width=2,className="d-flex align-items-end"),
+                dbc.Col(dbc.Row([
+                dbc.Col([set_init_values_button, inital_values_popover,
+                        html.Br(),
+                        reference_ground_button
+                        ], 
+                        width=2,
+                        className="d-flex flex-column gap-2 align-items-start",
+                        style={
+                            "flex": "0 0 200px",      # kein Wachstum, keine Schrumpfung, feste Basis 200px
+                            "maxWidth": "200px",      # maximal 200px
+                            "minWidth": "200px",      # minimal 200px
+                        }  
+                        ),
                 dbc.Col([
-                    drive_mode_menu,
-                    html.Br(),
-                    start_stop_button
-                ], width=2, style={
-                    "position": "relative",
-                    "zIndex": 20,
-                    "overflow": "visible"
-                })
+                        drive_mode_menu,
+                        html.Br(),
+                        start_stop_button
+                        ], 
+                        width=2,
+                        className="d-flex flex-column gap-2 align-items-start", 
+                        style={
+                            "flex": "0 0 200px",      # kein Wachstum, keine Schrumpfung, feste Basis 200px
+                            "maxWidth": "200px",      # maximal 200px
+                            "minWidth": "200px",      # minimal 200px
+                        } )
+                        ])
+                )
             ], 
             align="center", 
             style={
@@ -276,7 +342,7 @@ app.layout = dbc.Container([
                         dbc.Col(create_card("**Gesamtstrecke**", "-", "clsC4")),
                         dbc.Col(create_card("**Fahrzeit**", "-", "clsC5"))                 
             ], 
-            className="g-5", 
+            className="g-1", 
             justify="between",
             style={
                     "position": "relative",
@@ -288,7 +354,11 @@ app.layout = dbc.Container([
             # --- GRAFIK-BEREICH ---
             dbc.Row([
                 dbc.Col([header_plot,
-                        dcc.Graph(id='fig_1', figure=fig_1)], width=10),
+                        dcc.Graph(id='fig_1', figure=fig_1)], 
+                        width=10, 
+                        style={
+                            "maxWidth": "calc(100% - 200px)"
+                        }),
                 
                 dbc.Col([
                         dbc.Col(graph_display_menu),
@@ -302,13 +372,14 @@ app.layout = dbc.Container([
                         html.Br(),
                         html.Div(log_load_feedback, style={'position':'relative','zIndex':1}),
                         ], width=2, style={
-                    "position": "absolut",
-                    "zIndex": 20,
-                    "overflow": "visible"
-                }),
+                            "flex": "0 0 200px",      # kein Wachstum, keine Schrumpfung, feste Basis 200px
+                            "maxWidth": "200px",      # maximal 200px
+                            "minWidth": "200px",      # minimal 200px
+                        }
+                ),
             ], 
-            align="center",
-            className="g-2"),
+            align="right",
+            className="g-2 align-items-start "),
             #dbc.Row(graph_display_menu)
         ], 
         style={
@@ -318,6 +389,14 @@ app.layout = dbc.Container([
 #**********************************************
 # Callbacks
 #**********************************************
+
+# @app.callback(
+#     Output(),
+#     Input("set_init_values_button", "n_clickds"),
+#     prevent_initial_call=True
+# )
+# def set_initial_values(n):
+
 
 @app.callback(
     Output("dummy_div","children"),
@@ -374,9 +453,14 @@ def refresh_log_menu(n):
 
     State("start_stop_button", "children"),
     State({"type": "dropdown-menu", "menu": "drive_mode_menu"}, "label"),
+    State("input_speed", "value"),
+    State("input_angle", "value"),
+    State("input_time", "value"),
+    State("input_stop_dist", "value"),
     prevent_initial_call=True 
 )
-def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selection):
+def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selection,
+                              input_speed, input_angle, input_time, input_stop_dist):
     global car_thread_running
     global start_time_driving
 
@@ -385,7 +469,7 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
     with car_lock:
         if trigger_id == "car_poll_interval":
             if car_thread_running:
-                print("car thread running")
+                #print("car thread running")
                 return no_update, no_update, no_update
             
             stop_time_driving = time.time()
@@ -410,7 +494,11 @@ def start_stop_button_clicked(n_clicks, n_intervals, current_label, menu_selecti
                 reset_car()
                 return "Start", True, True # deactivate polling
             else:
-                Thread(target=car_process, args=(menu_selection,), daemon=True).start()
+                Thread(target=car_process, args=(menu_selection,
+                                                 input_speed,
+                                                 input_stop_dist, 
+                                                 input_angle, 
+                                                 input_time), daemon=True).start()
                 reset_global_statistic_vars()
 
                 car_thread_running = True
