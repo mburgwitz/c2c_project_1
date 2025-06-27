@@ -441,6 +441,10 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
 
     trigger_id = ctx.triggered_id
 
+    # data_loaded ist [data, timestamp]
+    if loaded_data is not None:
+        loaded_data = loaded_data[0]
+
     # Nur updaten, wenn der Button gerade "Stop" anzeigt (also Drive läuft)
     # und keine log-daten geladen wurden
     if current_label != "Stop" and trigger_id != "load_file_button":
@@ -471,7 +475,6 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
             no_update
         )
 
-
     else:     
         with car_lock:
             velocity.append(car.speed)
@@ -488,8 +491,6 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
         return "-", "-", "-", "-", "-", no_update
 
     # Basiszeit rechnen
-    print("status live data")
-
     elapsed = time.time() - start_time_driving
 
     total_drive_time = elapsed
@@ -544,7 +545,13 @@ def load_file(n_clicks, filename):
 
     # alles OK → ins Store schreiben, Feedback setzen
     feedback = f"Loaded file: **{filename}**"
-    return data, feedback
+
+    # data_loaded ist [data, timestamp]
+    # data dcc.Store das feld 'modified_timestamp' nur setzt, 
+    # wenn sich das Datum wirklich ändert, wird durch time.time()
+    # eine Änderung erzwungen. 'modified_timestamp' wird in 
+    # update_graph genutzt, um den aktuellsten Datensatz anzuzeigen
+    return [data, time.time()], feedback
 
 # Callback zur Aktualisierung des Graphen (Anforderung 2 & 3)
 @app.callback(
@@ -567,6 +574,10 @@ def update_graph(n1,n2,
                  time_loaded_data_modified,
                  time_live_data_modified ):
     # Erstelle eine Liniengrafik mit Plotly Express
+
+    # data_loaded ist [data, timestamp]
+    if data_loaded is not None:
+        data_loaded = data_loaded[0]
 
     trigger_id = ctx.triggered_id
     
@@ -599,15 +610,7 @@ def update_graph(n1,n2,
     else:
         data = data_loaded
 
-    # if trigger_id == "live_data_store":
-    #     data = data_live
-    # else:
-    #     data = data_loaded if data_loaded else data_live
-    
     df = pd.DataFrame(data)
-    # print("*****************")
-    # print(df.columns)
-    # print(df.head(10))
 
     # Verstrichene Zeit seit ersten timestamp
     df["cum_delta_t"] = df["timestamp"] - df["timestamp"].iloc[0]
@@ -633,9 +636,6 @@ def update_graph(n1,n2,
     fig["data"][0]["y"] = df[y_axis].tolist()
     fig["data"][0]["name"] = selected_metric
 
-    # print(df[y_axis].head())
-    # print(df.head(10))
-    
     return fig
 
 if __name__ == "__main__":
