@@ -18,26 +18,52 @@ class SensorCar(SonicCar):
 
     '''
     def __init__(self, steering_angle = 90, speed = 0):
+        """
+        Initialize SensorCar with infrared sensor and load hardware configuration.
+
+        Calls superclass constructors to set up drive and ultrasonic features,
+        then instantiates an Infrared sensor and applies reference values from
+        the hardware config file.
+
+        Parameters
+        ----------
+        steering_angle : int, optional
+            Initial steering angle (default is 90, straight ahead).
+        speed : int, optional
+            Initial speed (default is 0).
+        """
+
         super().__init__(steering_angle, speed)
         self.__irm = Infrared()
         cfg = loader.readjson("src/config/car_hardware_config.json")
         self.__irm.set_references(ref=cfg["infrared_reference"]) # setzen der Referenzwerte aus der Hareware-Config
 
     def get_line_status(self) -> list:
-        '''
-        Liest die digitalen Werte der 5 Infrarotsensoren.
-        Eine '1' bedeutet, der Sensor erkennt die Linie.
-        Eine '0' bedeutet, der Sensor erkennt den Hintergrund.
+        """
+        Read digital values from the five infrared sensors indicating line presence.
 
-        Returns:
-            list: Eine Liste mit 5 Elementen (0 oder 1), z.B. [0, 0, 1, 0, 0].
-        '''
+        Returns
+        -------
+        list of int
+            A list of five binary values (0 or 1), where 1 indicates the sensor
+            detects the line and 0 indicates background.
+        """
         return self.__irm.read_digital()
     
     def follow_line_analog(self,geschwindigkeit: int= 30):
-        '''
-        Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
-        '''
+        """
+        Follow a line using analog IR sensor readings until the line is lost.
+
+        Continuously reads averaged analog values, determines steering angle
+        based on the sensor with the minimum reading, and drives accordingly.
+        Recording stops when a significant deviation from the mean signal
+        indicates the line is no longer detected.
+
+        Parameters
+        ----------
+        geschwindigkeit : int, optional
+            Speed at which to follow the line (default is 30).
+        """
         sumlist= []
         self._stop_event.clear()
         self._running = True
@@ -56,12 +82,12 @@ class SensorCar(SonicCar):
         self._running = False
 
     def reference_ground(self):
-        '''
-        Die Referenz des Fußbodes wird in dieser Methode neu evaluiert und in die Hardware-Config geschrieben.
+        """
+        Re-evaluate the surface reference values for the infrared sensors.
 
-        Return:
-            keine
-        '''
+        Samples averaged IR readings for two seconds, computes new baseline
+        thresholds, and writes them back into the hardware config JSON file.
+        """
         sumlist= []
         start_zeit = time.time()
         while time.time() - start_zeit < 2: # feste Zeit zum erzuegen der Referenzwerte des Bodens
@@ -81,8 +107,20 @@ class SensorCar(SonicCar):
 
     def follow_line_digital(self,geschwindigkeit: int= 30, stop_distance: int = 20):
         '''
-        Basierend auf den digitalen Werten der Infarotsensoren wird der schwarzen Linie gefolgt.
-        Die Mehtode wertet auch den Abstand aus, bei einem Hindernis wird die Fahrt gestoppt. 
+        Follow a line using digital IR sensor readings until completion or obstacle.
+
+        Reads digital sensor values and ultrasonic distance in a loop,
+        adjusts speed and steering based on discrete pattern matching,
+        and stops when an obstacle is within `stop_distance` or too many
+        sensors detect the line (junction).
+
+        Parameters
+        ----------
+        geschwindigkeit : int, optional
+            Base speed for line following (default is 30).
+        stop_distance : int, optional
+            Distance in cm at which to stop when an obstacle is detected
+            (default is 20).
         '''
         self._stop_event.clear()
         self._running = True
@@ -104,8 +142,4 @@ class SensorCar(SonicCar):
         
 if __name__ == "__main__":
     car = SensorCar()
-    #car.test_infrared(10)
-    #car.follow_line_analog(60)
-    #car.reference_ground()
     car.follow_line_digital(60)
-    #car.stop()
