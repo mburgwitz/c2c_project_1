@@ -2,6 +2,8 @@ from basisklassen import FrontWheels, BackWheels
 import time
 import util.json_loader as loader
 
+from threading import Event
+
 class BaseCar:
     '''
     BaseCar Klasse ist die Klasse mit den Grundfahrfunktionen des Fahrzeuges.
@@ -25,7 +27,7 @@ class BaseCar:
     #Standardkonstruktor der Klasse, da alle Parmetern vordefinierten Werte haben.
     def __init__(self, steering_angle: int = 90.0, speed: int = 0.0, direction: int = 0):
 
-        cfg = loader.readjson("/home/pi/Desktop/git/c2c_project_1/src/config/car_hardware_config.json")
+        cfg = loader.readjson("src/config/car_hardware_config.json")
 
         self.__steering_angle = steering_angle
         self.__speed = speed
@@ -36,6 +38,14 @@ class BaseCar:
 
         # Initialisierung der Datenaufzeichnung
         self.log = []
+
+        # Flag, ob ein Fahrprozess gerade läuft
+        # wird von Fahrprozessen abgefragt, wird beim Start eines Fahrmodus True gesetzt
+        self._running = False
+
+        # fancy time.sleep
+        # nutzt Event.wait, unterbrechung mit .set()
+        self._stop_event = Event()
 
     #Property auf Privat-Attribut __steering_angle, Aufruf und Setzen erlaubt
     @property
@@ -49,10 +59,12 @@ class BaseCar:
     #Property auf Privat-Attribut __speed, Aufruf und Setzen erlaubt
     @property
     def speed(self):
+        #print(f"get speed: {self.__speed}")
         return self.__speed
     
     @speed.setter
     def speed(self, speed: int):
+        #print(f"set speed: {speed}")
         self.__speed = self.__checkSpeed(speed)
     
     @property
@@ -75,6 +87,12 @@ class BaseCar:
             return self.MAX_SPEED
         return speed
     
+    def checkSteeringAngle(self, angle: int) -> int:
+        return self.__checkSteeringAngle(angle)
+
+    def checkSpeed(self, speed: int) -> int:
+        return self.__checkSpeed(speed)
+    
     def _log_status(self):
         '''
         Private Methode, um den aktuellen Status des Fahrzeugs zu protokollieren.
@@ -87,13 +105,9 @@ class BaseCar:
         status_record = {
             "timestamp": time.time(),
             "speed": self.speed,
-            "steering_angle": self.steering_angle,
-            "direction": self.direction,
+            "steering_angle": self.steering_angle
         }
         self.log.append(status_record)
-        # Optional: Log-Ausgabe in der Konsole für Echtzeit-Debugging
-        # print(status_record)
-
     
     def drive(self, speed: int = None, angle: int = None):
         '''
@@ -108,6 +122,8 @@ class BaseCar:
             gibt keinen Wert zurück
 
         '''
+        #print(self.__bw.pwm)
+        self._log_status()   
         # Initialisierung von Variablen gewährleisten
         if angle is not None:
             self.__steering_angle = angle
@@ -121,11 +137,12 @@ class BaseCar:
             self.__bw.backward()
             self.__direction = -1
         else:
-            self.stop()
+            self.__bw.stop()
         #Drehung vornehmen
         self.__fw.turn(self.__steering_angle)
         #Speed wieder positiv festlegen, da nur 0 bis 100 erlaubt für __bw.speed
-        self.__bw.speed = abs(self.__speed)        
+        self.__bw.speed = abs(self.__speed)   
+        self._log_status()     
 
     def stop(self):
         '''
@@ -138,11 +155,23 @@ class BaseCar:
             gibt keinen Wert zurück
 
         '''
-        #Fahrzeug wird eingehalten(__bw.speed auf 0)
-        self.__bw.stop()
-        #Klassen-Interne Richtung auf 0 setzen.
-        self.__direction = 0
+        self.drive(speed = 0)
 
+        # self._log_status()  
+
+        # #Fahrzeug wird eingehalten(__bw.speed auf 0)
+        # self.__bw.stop()
+        # #Klassen-Interne Richtung auf 0 setzen.
+        # self.__direction = 0
+
+        # self._log_status()  
+
+    def hard_stop(self):
+        """ Unterbricht zusätzlich loops und timer
+        """
+        self.stop()
+        self._stop_event.set()
+        self._running = False
 
     def fahrmodus1(self, geschwindigkeit: int, fahrzeit: float):
         """fahrmodus1 
@@ -154,16 +183,21 @@ class BaseCar:
         fahrzeit : float
             Gesamtfahrzeit des Fahrzeugs
         """
-        self.drive(speed = geschwindigkeit, angle = 90)
-        self._log_status()
-        time.sleep(fahrzeit/2)
+        self._running = True
+        self._stop_event.clear()
 
+        self.drive(speed = geschwindigkeit, angle = 90)
+
+        if self._stop_event.wait(timeout=fahrzeit/2):
+            self._running = False
+            return
+            
         self.drive(speed = geschwindigkeit *-1, angle = 90)
-        self._log_status()
-        time.sleep(fahrzeit/2)
-        
+        if self._stop_event.wait(timeout=fahrzeit/2):
+            self._running = False
+            return
+
         self.stop()
-        self._log_status()
 
  
     def fahrmodus2(self, geschwindigkeit: int, lenkwinkel: int):
@@ -177,39 +211,39 @@ class BaseCar:
         lenkwinkel : float
             Lenkwinkel für die Kreisfahrt
         """
+        self._running = True
+        self._stop_event.clear()
+
         self.drive(speed = geschwindigkeit, angle = 90)
-        self._log_status()
-        time.sleep(1)
+        
+        if self._stop_event.wait(timeout=1):
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit, angle = lenkwinkel)
-        self._log_status()
-        time.sleep(8)
+        
+        if self._stop_event.wait(timeout=8):
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit *-1, angle = lenkwinkel)
-        self._log_status()
-        time.sleep(8)
+        
+        if self._stop_event.wait(timeout=8):
+            self._running = False
+            return
 
         self.drive(speed = geschwindigkeit *-1, angle = 90)
-        self._log_status()
-        time.sleep(1)
 
-        self.stop()
-        self._log_status()
- 
+        if self._stop_event.wait(timeout=1):
+            self._running = False
+            return
+        
+        self.stop() 
 
 
 if __name__ == '__main__':
     car = BaseCar()
-    #car.steering_angle = 10
-    #Fahren
-    car.drive(30, 90)
-    #Für 2s erlauben, dass Fahrzeug fährt
-    time.sleep(2)
-    # Fahrzeug anhalten
-    car.stop()
-    # Rueckwaerts fahren, um 45Grad Lenken
-    car.drive(-30, 45)
-    time.sleep(2)
-    # Fahrzeug anhalten durch speed=0
-    car.drive(0, 90)
-    car.stop()
+    car.fahrmodus1(30,3)
+    from util.json_loader import save_log_to_file
+    save_log_to_file(car.log,'test_log.json')
+   
