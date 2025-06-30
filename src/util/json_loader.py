@@ -2,6 +2,7 @@ import json
 import pandas as pd
  
 def readjson(file2read= "car_hardware_config.json"):
+    """Einlesen von JSON und Rückgabe als dict"""
     try:
         with open (file2read,"r", encoding="utf-8") as file:
             wasdrinsteht=json.load(file)
@@ -18,11 +19,5 @@ def save_log_to_file(log_data, filename="fahrt_log.json"):
         print(f"Fahrdaten wurden erfolgreich in '{filename}' gespeichert.")
     except Exception as e:
         print(f"Fehler beim Speichern der Log-Datei: {e}")
-     
-if __name__ == "__main__":
-    input=readjson()
-    t_off=input["turning_offset"]
-    f_A=input["forward_A"]
-    f_B=input["forward_B"]  
-#    print(t_off)
+
  

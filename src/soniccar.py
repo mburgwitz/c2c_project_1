@@ -3,6 +3,7 @@ from basisklassen import Ultrasonic
 import time
 import random
 from random import normalvariate, randrange
+
 class SonicCar(BaseCar):
     '''
     Die SonicCar-Klasse erweitert die BaseCar-Klasse um die Funktionalität eines Ultraschallsensors.

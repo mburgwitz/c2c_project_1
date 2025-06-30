@@ -157,15 +157,6 @@ class BaseCar:
         '''
         self.drive(speed = 0)
 
-        # self._log_status()  
-
-        # #Fahrzeug wird eingehalten(__bw.speed auf 0)
-        # self.__bw.stop()
-        # #Klassen-Interne Richtung auf 0 setzen.
-        # self.__direction = 0
-
-        # self._log_status()  
-
     def hard_stop(self):
         """ Unterbricht zusätzlich loops und timer
         """
@@ -239,11 +230,3 @@ class BaseCar:
             return
         
         self.stop() 
-
-
-if __name__ == '__main__':
-    car = BaseCar()
-    car.fahrmodus1(30,3)
-    from util.json_loader import save_log_to_file
-    save_log_to_file(car.log,'test_log.json')
-   
