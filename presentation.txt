@@ -1,0 +1,32 @@
+C2C:
+allgemein
+Anwendung von theoretischem Wissen
+	Learnings:
+		- Vererbung bis zum Ende
+		- Setter & Getter
+		- objektorientierte Programmierung
+		- Entwickeln auf RasberryPi
+		- Darstellun gmit Dash
+		- Code von verschiedenen Entwickeln zusammen zuführen
+Probelmlösung abseites der Programmierungsaufgabe:
+Hardware
+Vs-Code (Versionskompatibilität)
+….
+ 
+Arbeitsweise/struktur:
+Main => protected
+Jeder hat eigenen branch => Zusammenführung in consolitation => main
+versucht entsprechend der Vorkenntnisse die Aufgaben aufzuteilen
+ 
+Ergebnisse:
+Videos
+Dashboard
+Zusammenarbeit im Team (unterschiedliches Level)
+besondere Code-Abschnitte 
+	- Multithreading für live Daten
+	- Referenz ziehen und ablegen
+	
+
+Aussicht: 
+Doku von Anfang an einbinden 
+Softwareplanung gezielter gestalten
