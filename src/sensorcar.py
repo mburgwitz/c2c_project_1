@@ -35,6 +35,7 @@ class SensorCar(SonicCar):
 
         super().__init__(steering_angle, speed)
         self.__irm = Infrared()
+        self.reference_ground()  # Optional: Referenzwerte der Infrarotsensoren setzen         
         cfg = loader.readjson("src/config/car_hardware_config.json")
         self.__irm.set_references(ref=cfg["infrared_reference"]) # setzen der Referenzwerte aus der Hareware-Config
 
