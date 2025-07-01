@@ -756,7 +756,7 @@ def update_status_cards( n_intervals, n_clicks, current_label, loaded_data):
 
     # avg velocity between now and last timestamp times delta_t
     delta_t     = timestamps[-1] - timestamps[-2]
-    segment     = (velocity[-1] + velocity[-2]) / 2 * delta_t
+    segment     = (abs(velocity[-1]) + abs(velocity[-2])) / 2 * delta_t
     total_route = (total_route or 0) + segment
 
     v_max = max(velocity)
