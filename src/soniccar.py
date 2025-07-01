@@ -3,6 +3,7 @@ from basisklassen import Ultrasonic
 import time
 import random
 from random import normalvariate, randrange
+
 class SonicCar(BaseCar):
     '''
     Die SonicCar-Klasse erweitert die BaseCar-Klasse um die Funktionalität eines Ultraschallsensors.
@@ -49,15 +50,28 @@ class SonicCar(BaseCar):
         return distance
 
     def stop(self):
-        '''
-        Überschreibt die stop-Methode von BaseCar, um die Datenaufzeichnung hinzuzufügen.
-        '''
+        """
+        Stop the car and cease ultrasound sensor operation.
+
+        Overrides BaseCar.stop() to also halt the ultrasonic sensor.
+
+        Returns
+        -------
+        None
+        """
         # Wichtig: Erst Geschwindigkeit im internen Zustand anpassen, dann stoppen
         super().stop()
         self.__us.stop()  # Ultraschallsensor stoppen, falls nötig
 
     def hard_stop(self):
-        """ Unterbricht zusätzlich loops und timer
+        """
+        Immediately stop all car motion and loops, and shut down the sensor.
+
+        Extends BaseCar.hard_stop() by ensuring the ultrasonic sensor is stopped.
+
+        Returns
+        -------
+        None
         """
         super().hard_stop()
         self.__us.stop()
@@ -170,6 +184,32 @@ class SonicCar(BaseCar):
     def random_drive(self, stop_at_obstacle: bool = True, stop_distance: int = 25,
                      normal_speed: int = 30, drive_time: int =20,
                      min_speed: int = 30, max_speed: int = 60):
+        """
+        Drive in random segments, adjusting speed and angle, optionally stopping or evading obstacles.
+
+        The car selects random steering and speed variations around a base value, drives for
+        short random intervals, and either stops or performs an evade maneuver upon detecting
+        an obstacle within `stop_distance`. Continues until `drive_time` has elapsed or stopped.
+
+        Parameters
+        ----------
+        stop_at_obstacle : bool, optional
+            If True, stop when an obstacle is detected; if False, perform `evade_obstacle()`.
+        stop_distance : int, optional
+            Distance in cm at which to trigger stopping or evasion.
+        normal_speed : int, optional
+            Base speed around which random variation is applied.
+        drive_time : int, optional
+            Total duration in seconds for the random drive session.
+        min_speed : int, optional
+            Minimum allowable speed after variation.
+        max_speed : int, optional
+            Maximum allowable speed after variation.
+
+        Returns
+        -------
+        None
+        """
 
         try:
 
@@ -225,6 +265,16 @@ class SonicCar(BaseCar):
             self.stop()
 
     def evade_obstacle(self) -> None:
+        """
+        Execute an obstacle evasion maneuver by reversing and turning, then restore state.
+
+        Saves the current speed and steering angle, performs a backward turn at a fixed
+        speed and angle for a short duration, then resets speed and heading to prior values.
+
+        Returns
+        -------
+        None
+        """
         prev_speed = self.speed
         prev_angle = self.steering_angle
 
@@ -248,7 +298,6 @@ class SonicCar(BaseCar):
             t_delta = time.time() - start_time
 
             distance = self.get_distance()
-            #self._log_status()
 
         self.speed = prev_speed 
         self.steering_angle = prev_angle 
